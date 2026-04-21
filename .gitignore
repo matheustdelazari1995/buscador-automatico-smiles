@@ -1,0 +1,15 @@
+venv/
+.browser-profile/
+.browser-profile-*/
+profiles/
+__pycache__/
+*.pyc
+.env
+accounts.json
+config.json
+routes.json
+results.json
+system_state.json
+resultados/
+data/
+*.db

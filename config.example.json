@@ -1,0 +1,28 @@
+{
+  "evolution_api": {
+    "url": "https://sua-evolution-api.com.br",
+    "instance": "nome_da_instancia",
+    "api_key": "SUA_API_KEY_AQUI",
+    "destination": "5511999999999"
+  },
+  "schedule": {
+    "monday": {
+      "label": "Brasil -> Lisboa (TAP)",
+      "program": "TP",
+      "max_price_k": 53,
+      "routes": [
+        {"from": "GRU", "to": "LIS"},
+        {"from": "GIG", "to": "LIS"}
+      ]
+    },
+    "tuesday": {
+      "label": "Brasil -> Buenos Aires (Smiles GOL)",
+      "program": "G3",
+      "max_price_k": 35,
+      "routes": [
+        {"from": "VIX", "to": "AEP"},
+        {"from": "GIG", "to": "AEP"}
+      ]
+    }
+  }
+}

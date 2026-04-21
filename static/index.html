@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador Automatico Smiles</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a; color: #e2e8f0; min-height: 100vh;
+        }
+        header {
+            background: #1e293b; padding: 16px 24px; border-bottom: 1px solid #334155;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        header h1 { font-size: 20px; color: #38bdf8; }
+        header .status { font-size: 13px; display: flex; align-items: center; gap: 8px; }
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #ef4444; animation: pulse 2s infinite;
+        }
+        .status-dot.connected { background: #22c55e; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+        /* Tabs */
+        .tabs {
+            display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid #334155;
+        }
+        .tab {
+            background: transparent; border: none; color: #94a3b8;
+            padding: 10px 20px; font-size: 14px; cursor: pointer;
+            border-bottom: 2px solid transparent; transition: all 0.15s;
+        }
+        .tab:hover { color: #e2e8f0; }
+        .tab.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+        .tab .count {
+            background: #334155; color: #cbd5e1; padding: 2px 8px; border-radius: 10px;
+            font-size: 11px; margin-left: 6px;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Banners */
+        .banner {
+            padding: 12px 16px; border-radius: 8px; margin-bottom: 16px;
+            font-size: 13px; display: none;
+        }
+        .banner.show { display: block; }
+        .banner.block {
+            background: #7c2d12; color: #fed7aa; border: 1px solid #c2410c;
+        }
+        .banner.info {
+            background: #1e3a5f; color: #93c5fd; border: 1px solid #2563eb;
+        }
+        .banner.preventive {
+            background: #78350f; color: #fde68a; border: 1px solid #ca8a04;
+        }
+        .banner.paused {
+            background: #334155; color: #cbd5e1; border: 1px solid #64748b;
+        }
+        .btn-pause-header {
+            background: #ca8a04; color: white; border: none; border-radius: 6px;
+            padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+            margin-right: 12px;
+        }
+        .btn-pause-header:hover { background: #a16207; }
+        .btn-pause-header.resume { background: #16a34a; }
+        .btn-pause-header.resume:hover { background: #15803d; }
+
+        /* Forms */
+        .card {
+            background: #1e293b; border-radius: 12px; padding: 20px;
+            margin-bottom: 16px; border: 1px solid #334155;
+        }
+        .card h2 { font-size: 15px; margin-bottom: 14px; color: #94a3b8; }
+        .form-row {
+            display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+            gap: 10px; align-items: end;
+        }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label {
+            font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .form-group input, .form-group select {
+            background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+            padding: 9px 12px; color: #e2e8f0; font-size: 14px; outline: none;
+        }
+        .form-group input:focus, .form-group select:focus { border-color: #38bdf8; }
+
+        .form-row-2 {
+            display: grid; grid-template-columns: 1fr auto auto;
+            gap: 12px; align-items: end; margin-top: 12px;
+        }
+        .form-options {
+            display: flex; align-items: center; gap: 16px; margin-top: 12px; flex-wrap: wrap;
+        }
+        .direction-group { display: flex; align-items: center; gap: 10px; }
+        .direction-group span { font-size: 12px; color: #64748b; margin-right: 4px; }
+        .direction-radio {
+            display: flex; align-items: center; gap: 5px; font-size: 13px;
+            color: #94a3b8; cursor: pointer;
+        }
+        .direction-radio input[type="radio"] { width: 16px; height: 16px; accent-color: #2563eb; }
+
+        .month-selector { display: flex; flex-direction: column; gap: 4px; }
+        .month-selector label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+        .month-mode-tabs { display: flex; gap: 0; }
+        .month-mode-tabs button {
+            background: #0f172a; border: 1px solid #334155; color: #94a3b8;
+            padding: 6px 12px; font-size: 12px; cursor: pointer;
+        }
+        .month-mode-tabs button:first-child { border-radius: 6px 0 0 6px; }
+        .month-mode-tabs button:last-child { border-radius: 0 6px 6px 0; }
+        .month-mode-tabs button.active { background: #2563eb; border-color: #2563eb; color: white; }
+        .month-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+        .month-chip {
+            background: #0f172a; border: 1px solid #334155; border-radius: 6px;
+            padding: 4px 9px; font-size: 11px; color: #94a3b8; cursor: pointer;
+        }
+        .month-chip.selected {
+            background: #1e3a5f; border-color: #38bdf8; color: #38bdf8;
+        }
+
+        .btn {
+            border: none; border-radius: 8px; padding: 9px 18px; font-size: 13px;
+            font-weight: 600; cursor: pointer; display: inline-flex;
+            align-items: center; gap: 6px; white-space: nowrap; transition: all 0.15s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-success { background: #16a34a; color: white; }
+        .btn-warning { background: #ca8a04; color: white; }
+        .btn-danger { background: #dc2626; color: white; }
+        .btn-ghost {
+            background: transparent; color: #94a3b8; border: 1px solid #334155;
+        }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+        /* Routes table */
+        .routes-table {
+            width: 100%; border-collapse: collapse;
+        }
+        .routes-table th {
+            text-align: left; font-size: 11px; text-transform: uppercase;
+            color: #64748b; letter-spacing: 0.5px; padding: 8px 10px;
+            border-bottom: 1px solid #334155;
+        }
+        .routes-table td {
+            padding: 10px; font-size: 13px; border-bottom: 1px solid #1f2937;
+            vertical-align: middle;
+        }
+        .routes-table tr:hover td { background: #0f172a; }
+        .route-info { font-weight: 600; color: #e2e8f0; }
+        .route-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+        .status-pill {
+            display: inline-block; padding: 3px 8px; border-radius: 10px;
+            font-size: 11px; font-weight: 600;
+        }
+        .status-pending { background: #334155; color: #cbd5e1; }
+        .status-searching { background: #1e3a5f; color: #60a5fa; }
+        .status-completed { background: #064e3b; color: #6ee7b7; }
+        .status-error { background: #7c1d1d; color: #fca5a5; }
+        .status-blocked { background: #7c2d12; color: #fed7aa; }
+
+        .progress-bar {
+            width: 100%; height: 4px; background: #334155; border-radius: 2px;
+            overflow: hidden; margin-top: 6px;
+        }
+        .progress-bar .fill {
+            height: 100%; background: #22c55e; transition: width 0.3s;
+        }
+
+        /* Results */
+        .result-card {
+            background: #1e293b; border-radius: 12px; padding: 14px 18px;
+            margin-bottom: 10px; border: 1px solid #334155;
+            transition: border-color 0.15s;
+        }
+        .result-card.expanded { border-color: #38bdf8; }
+        .result-card-clickable {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; flex-wrap: wrap; cursor: pointer; user-select: none;
+        }
+        .result-card-clickable:hover h3 { color: #7dd3fc; }
+        .result-card-clickable h3 { font-size: 15px; color: #38bdf8; transition: color 0.15s; }
+        .result-card-clickable .chevron {
+            color: #64748b; font-size: 14px; transition: transform 0.15s;
+        }
+        .result-card.expanded .chevron { transform: rotate(180deg); color: #38bdf8; }
+        .result-card-body {
+            margin-top: 14px; padding-top: 14px; border-top: 1px solid #334155;
+        }
+        .min-price-chip {
+            background: #064e3b; color: #6ee7b7; padding: 3px 10px;
+            border-radius: 10px; font-size: 12px; font-weight: 600;
+            white-space: nowrap;
+        }
+        .min-price-chip.none { background: #334155; color: #94a3b8; }
+
+        /* Results filter/sort toolbar */
+        .results-toolbar {
+            background: #1e293b; border-radius: 10px; padding: 12px 16px;
+            margin-bottom: 14px; border: 1px solid #334155;
+            display: grid; grid-template-columns: 1fr 1fr 1.1fr 1.1fr auto;
+            gap: 10px; align-items: end;
+        }
+        .results-toolbar .tb-group { display: flex; flex-direction: column; gap: 3px; }
+        .results-toolbar label {
+            font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .results-toolbar input, .results-toolbar select {
+            background: #0f172a; border: 1px solid #334155; border-radius: 6px;
+            padding: 7px 10px; color: #e2e8f0; font-size: 13px; outline: none;
+        }
+        .results-toolbar input:focus, .results-toolbar select:focus { border-color: #38bdf8; }
+        .results-toolbar .clear-btn {
+            background: transparent; border: 1px solid #334155; color: #94a3b8;
+            padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+            white-space: nowrap;
+        }
+        .results-toolbar .clear-btn:hover { border-color: #ef4444; color: #fca5a5; }
+
+        @media (max-width: 768px) {
+            .results-toolbar { grid-template-columns: 1fr 1fr; }
+        }
+        .result-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px; gap: 12px; flex-wrap: wrap;
+        }
+        .result-header h3 { font-size: 15px; color: #38bdf8; }
+        .result-header .time { font-size: 11px; color: #64748b; }
+        .wa-sent-badge {
+            background: #064e3b; color: #6ee7b7; padding: 3px 8px;
+            border-radius: 4px; font-size: 11px;
+        }
+        .direction { margin-bottom: 10px; }
+        .direction-label {
+            font-size: 12px; color: #f59e0b; font-weight: 600; margin-bottom: 4px;
+        }
+        .direction-label.return { color: #818cf8; }
+        .month-row { font-size: 13px; color: #cbd5e1; padding: 2px 0; }
+        .month-name { color: #94a3b8; }
+        .no-data { color: #475569; font-style: italic; font-size: 12px; }
+        .cheapest {
+            margin-top: 6px; padding: 6px 10px; background: #064e3b;
+            border-radius: 6px; font-size: 12px;
+        }
+        .cheapest b { color: #34d399; }
+        .cheapest .dates { color: #6ee7b7; }
+
+        .empty-state {
+            text-align: center; padding: 48px; color: #475569;
+        }
+        .empty-state .icon { font-size: 36px; margin-bottom: 12px; }
+
+        .toolbar {
+            display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .form-row { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Buscador Automatico Smiles</h1>
+        <div class="status">
+            <button class="btn-pause-header" id="pauseBtn" onclick="togglePause()">Pausar</button>
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Desconectado</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('routes')">
+                Rotas <span class="count" id="routesCount">0</span>
+            </button>
+            <button class="tab" onclick="switchTab('results')">
+                Resultados <span class="count" id="resultsCount">0</span>
+            </button>
+            <button class="tab" onclick="switchTab('accounts')">
+                Contas <span class="count" id="accountsCount">0</span>
+            </button>
+        </div>
+
+        <div id="blockBanner" class="banner block">
+            <b>AwardTool bloqueou as buscas.</b>
+            <span id="blockMsg">Aguardando para retomar...</span>
+        </div>
+
+        <div id="preventiveBanner" class="banner preventive">
+            <b>Pausa preventiva (evitar bloqueio).</b>
+            <span id="preventiveMsg">Aguardando...</span>
+            <span id="preventiveCountdown" style="font-weight:600"></span>
+        </div>
+
+        <div id="pausedBanner" class="banner paused">
+            <b>Sistema pausado.</b>
+            As buscas nao vao avancar ate voce clicar em Retomar.
+            As rotas que ja estavam rodando terminam normalmente.
+        </div>
+
+        <!-- ========== ABA ROTAS ========== -->
+        <div id="tab-routes" class="tab-content active">
+            <div class="card">
+                <h2>Cadastrar nova rota</h2>
+                <div class="form-row" style="grid-template-columns: 1fr 1fr 1fr 1fr">
+                    <div class="form-group">
+                        <label>Origem</label>
+                        <input type="text" id="origin" placeholder="GRU" maxlength="3"
+                               style="text-transform: uppercase;">
+                    </div>
+                    <div class="form-group">
+                        <label>Destino</label>
+                        <input type="text" id="dest" placeholder="LIS" maxlength="3"
+                               style="text-transform: uppercase;">
+                    </div>
+                    <div class="form-group">
+                        <label>Programa</label>
+                        <select id="program">
+                            <option value="TP">TAP Miles&Go</option>
+                            <option value="G3">Smiles GOL</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Classe</label>
+                        <select id="cabin">
+                            <option value="economy">Economica</option>
+                            <option value="business">Executiva</option>
+                            <option value="first">Primeira Classe</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row-2">
+                    <div class="month-selector">
+                        <label>Meses</label>
+                        <div class="month-mode-tabs">
+                            <button class="active" onclick="setMonthMode('all')">Ano todo</button>
+                            <button onclick="setMonthMode('select')">Escolher</button>
+                        </div>
+                        <div class="month-chips" id="monthChips" style="display: none;"></div>
+                    </div>
+                    <button class="btn btn-primary" onclick="addRoute()">+ Adicionar rota</button>
+                </div>
+                <div class="form-options">
+                    <div class="direction-group">
+                        <span>Direcao:</span>
+                        <label class="direction-radio">
+                            <input type="radio" name="direction" value="roundtrip" checked>
+                            Ida e volta
+                        </label>
+                        <label class="direction-radio">
+                            <input type="radio" name="direction" value="outbound">
+                            So ida
+                        </label>
+                        <label class="direction-radio">
+                            <input type="radio" name="direction" value="inbound">
+                            So volta
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <button class="btn btn-success" onclick="enqueueAll()">
+                    Iniciar busca das rotas pendentes
+                </button>
+                <button class="btn btn-warning" onclick="enqueueAllForce()">
+                    Refazer todas do zero
+                </button>
+            </div>
+
+            <div class="card">
+                <h2>Rotas cadastradas</h2>
+                <table class="routes-table">
+                    <thead>
+                        <tr>
+                            <th>Rota</th>
+                            <th>Filtros</th>
+                            <th>Status</th>
+                            <th>Progresso</th>
+                            <th>Acoes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="routesTbody"></tbody>
+                </table>
+                <div id="noRoutesMsg" class="empty-state" style="display:none;">
+                    <div class="icon">+</div>
+                    <p>Nenhuma rota cadastrada.<br>Use o formulario acima para adicionar.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== ABA RESULTADOS ========== -->
+        <div id="tab-results" class="tab-content">
+            <div class="results-toolbar">
+                <div class="tb-group">
+                    <label>Filtrar origem</label>
+                    <input type="text" id="filterOrigin" placeholder="Ex: VIX"
+                           style="text-transform: uppercase"
+                           oninput="onFilterChange()">
+                </div>
+                <div class="tb-group">
+                    <label>Filtrar destino</label>
+                    <input type="text" id="filterDest" placeholder="Ex: LIS"
+                           style="text-transform: uppercase"
+                           oninput="onFilterChange()">
+                </div>
+                <div class="tb-group">
+                    <label>Mes especifico</label>
+                    <select id="filterMonth" onchange="onFilterChange()">
+                        <option value="">Todos os meses</option>
+                    </select>
+                </div>
+                <div class="tb-group">
+                    <label>Ordenar por</label>
+                    <select id="sortMode" onchange="onFilterChange()">
+                        <option value="default">Ordem de cadastro</option>
+                        <option value="price-asc">Menor preço primeiro</option>
+                        <option value="price-desc">Maior preço primeiro</option>
+                        <option value="route-asc">Rota (A-Z)</option>
+                    </select>
+                </div>
+                <button class="clear-btn" onclick="clearResultFilters()">Limpar</button>
+            </div>
+
+            <div id="resultsList">
+                <div class="empty-state">
+                    <div class="icon">...</div>
+                    <p>Nenhum resultado ainda.<br>Cadastre rotas e inicie a busca.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== ABA CONTAS ========== -->
+        <div id="tab-accounts" class="tab-content">
+            <div class="card">
+                <h2>Adicionar nova conta</h2>
+                <div class="form-row" style="grid-template-columns: 1fr 1fr 2fr auto">
+                    <div class="form-group">
+                        <label>ID da conta</label>
+                        <input type="text" id="accId" placeholder="conta1">
+                    </div>
+                    <div class="form-group">
+                        <label>Nome/Apelido</label>
+                        <input type="text" id="accName" placeholder="Conta principal">
+                    </div>
+                    <div class="form-group">
+                        <label>Observacoes (opcional)</label>
+                        <input type="text" id="accNotes" placeholder="Email: exemplo@gmail.com">
+                    </div>
+                    <button class="btn btn-primary" onclick="addAccount()">+ Adicionar</button>
+                </div>
+                <div style="margin-top:12px;padding:12px;background:#0f172a;border-radius:8px;
+                            font-size:12px;color:#94a3b8;border-left:3px solid #2563eb">
+                    <b>Como fazer login nessa conta:</b><br>
+                    1. Para o servidor: <code style="color:#e2e8f0">pkill -f server.py</code><br>
+                    2. Rode: <code style="color:#e2e8f0">./venv/bin/python login_helper.py ID_DA_CONTA</code><br>
+                    3. Logue no AwardTool (tem 2 min). Depois feche a janela.<br>
+                    4. Reinicie o servidor: <code style="color:#e2e8f0">./venv/bin/python server.py</code>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Contas cadastradas</h2>
+                <table class="routes-table">
+                    <thead>
+                        <tr>
+                            <th>Conta</th>
+                            <th>Perfil Chrome</th>
+                            <th>Status</th>
+                            <th>Rota atual</th>
+                            <th>Acoes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="accountsTbody"></tbody>
+                </table>
+                <div id="noAccountsMsg" class="empty-state" style="display:none;">
+                    <div class="icon">+</div>
+                    <p>Nenhuma conta cadastrada.<br>Adicione pelo menos uma pra comecar.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectTimer = null;
+        let monthMode = 'all';
+        let selectedMonths = [];
+
+        // State
+        let routes = [];
+        let results = {};         // route_id -> result
+        let progressMap = {};     // route_id -> {percent, message, account_id}
+        let queueList = [];
+        let accounts = [];
+        let systemPaused = false;
+        // Results view state
+        const expandedResults = new Set();  // route_ids currently expanded
+        let resultFilterOrigin = '';
+        let resultFilterDest = '';
+        let resultFilterMonth = '';  // e.g. "Julho 2026" or ''
+        let resultSortMode = 'default';
+
+        // ======= Month chips =======
+        function initMonthChips() {
+            const container = document.getElementById('monthChips');
+            const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+            const now = new Date();
+            let startM = now.getMonth() + (now.getDate() > 15 ? 1 : 0);
+            let startY = now.getFullYear();
+            if (startM > 11) { startM -= 12; startY++; }
+
+            container.innerHTML = '';
+            for (let i = 0; i < 12; i++) {
+                let m = startM + i;
+                let y = startY;
+                while (m > 11) { m -= 12; y++; }
+                const chip = document.createElement('span');
+                chip.className = 'month-chip';
+                chip.textContent = `${names[m]}/${String(y).slice(2)}`;
+                chip.dataset.month = m + 1;
+                chip.dataset.year = y;
+                chip.onclick = () => toggleMonth(chip);
+                container.appendChild(chip);
+            }
+        }
+        function setMonthMode(mode) {
+            monthMode = mode;
+            document.querySelectorAll('.month-mode-tabs button').forEach(b => b.classList.remove('active'));
+            if (mode === 'all') {
+                document.querySelector('.month-mode-tabs button:first-child').classList.add('active');
+                document.getElementById('monthChips').style.display = 'none';
+                selectedMonths = [];
+                document.querySelectorAll('.month-chip').forEach(c => c.classList.remove('selected'));
+            } else {
+                document.querySelector('.month-mode-tabs button:last-child').classList.add('active');
+                document.getElementById('monthChips').style.display = 'flex';
+            }
+        }
+        function toggleMonth(chip) {
+            chip.classList.toggle('selected');
+            const m = parseInt(chip.dataset.month);
+            const y = parseInt(chip.dataset.year);
+            if (chip.classList.contains('selected')) {
+                if (!selectedMonths.find(s => s.year === y && s.month === m)) {
+                    selectedMonths.push({ year: y, month: m });
+                }
+            } else {
+                selectedMonths = selectedMonths.filter(s => !(s.year === y && s.month === m));
+            }
+        }
+        initMonthChips();
+
+        // ======= Tabs =======
+        function switchTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + name).classList.add('active');
+        }
+
+        // ======= WebSocket =======
+        function connectWS() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}/ws`);
+            ws.onopen = () => {
+                document.getElementById('statusDot').classList.add('connected');
+                document.getElementById('statusText').textContent = 'Conectado';
+                if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
+            };
+            ws.onclose = () => {
+                document.getElementById('statusDot').classList.remove('connected');
+                document.getElementById('statusText').textContent = 'Desconectado';
+                if (!reconnectTimer) reconnectTimer = setInterval(connectWS, 3000);
+            };
+            ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
+        }
+
+        function handleMessage(msg) {
+            switch (msg.type) {
+                case 'state':
+                    routes = msg.routes || [];
+                    accounts = msg.accounts || [];
+                    queueList = msg.queue || [];
+                    systemPaused = !!msg.paused;
+                    fetchAllResults();
+                    renderAccounts();
+                    updatePauseUI();
+                    break;
+                case 'system_paused':
+                    systemPaused = true;
+                    updatePauseUI();
+                    break;
+                case 'system_resumed':
+                    systemPaused = false;
+                    updatePauseUI();
+                    break;
+                case 'route_added':
+                    routes.push(msg.route);
+                    renderRoutes();
+                    break;
+                case 'route_removed':
+                    routes = routes.filter(r => r.id !== msg.route_id);
+                    delete results[msg.route_id];
+                    delete progressMap[msg.route_id];
+                    renderRoutes(); renderResults();
+                    break;
+                case 'route_enqueued':
+                    updateRouteStatus(msg.route_id, 'pending');
+                    if (!queueList.includes(msg.route_id)) queueList.push(msg.route_id);
+                    renderRoutes();
+                    break;
+                case 'batch_enqueued':
+                    routes.forEach(r => {
+                        if (r.status !== 'searching') r.status = 'pending';
+                    });
+                    renderRoutes();
+                    break;
+                case 'route_status':
+                    updateRouteStatus(msg.route_id, msg.status);
+                    // Clear old progress if route is no longer searching
+                    if (msg.status !== 'searching') {
+                        delete progressMap[msg.route_id];
+                    }
+                    renderRoutes();
+                    break;
+                case 'progress':
+                    progressMap[msg.route_id] = {
+                        percent: msg.percent, message: msg.message, account_id: msg.account_id
+                    };
+                    updateProgressUI(msg.route_id);
+                    break;
+                case 'route_completed':
+                    results[msg.route_id] = msg.result;
+                    updateRouteStatus(msg.route_id, 'completed');
+                    const route = routes.find(r => r.id === msg.route_id);
+                    if (route) route.has_result = true;
+                    delete progressMap[msg.route_id];
+                    renderRoutes(); renderResults();
+                    break;
+                case 'route_error':
+                    updateRouteStatus(msg.route_id, 'error');
+                    const er = routes.find(r => r.id === msg.route_id);
+                    if (er) er.last_error = msg.error;
+                    delete progressMap[msg.route_id];
+                    renderRoutes();
+                    break;
+                case 'account_added':
+                    accounts.push(msg.account);
+                    renderAccounts();
+                    break;
+                case 'account_removed':
+                    accounts = accounts.filter(a => a.id !== msg.account_id);
+                    renderAccounts();
+                    break;
+                case 'account_updated':
+                    const idx = accounts.findIndex(a => a.id === msg.account.id);
+                    if (idx >= 0) accounts[idx] = msg.account;
+                    renderAccounts();
+                    break;
+                case 'account_blocked':
+                    const blockedAcc = accounts.find(a => a.id === msg.account_id);
+                    if (blockedAcc) {
+                        blockedAcc.status = 'blocked';
+                        blockedAcc.last_error = msg.reason;
+                    }
+                    renderAccounts();
+                    break;
+                case 'account_resumed':
+                    const resumedAcc = accounts.find(a => a.id === msg.account_id);
+                    if (resumedAcc) resumedAcc.status = 'idle';
+                    renderAccounts();
+                    break;
+                case 'account_cooldown':
+                    const cdAcc = accounts.find(a => a.id === msg.account_id);
+                    if (cdAcc) {
+                        cdAcc.status = 'cooldown';
+                        cdAcc.cooldown_end_ts = Date.now() + (msg.seconds * 1000);
+                    }
+                    renderAccounts();
+                    break;
+                case 'account_cooldown_end':
+                case 'account_cooldown_skipped':
+                    const cdEndAcc = accounts.find(a => a.id === msg.account_id);
+                    if (cdEndAcc) {
+                        cdEndAcc.status = 'idle';
+                        cdEndAcc.cooldown_end_ts = null;
+                    }
+                    renderAccounts();
+                    break;
+                case 'preventive_pause':
+                    startPreventiveCountdown(msg.seconds, msg.retry_at, msg.account_id);
+                    break;
+                case 'preventive_resumed':
+                    stopPreventiveCountdown();
+                    break;
+                case 'whatsapp_sent':
+                    const r = routes.find(x => x.id === msg.route_id);
+                    if (r) r.whatsapp_sent_at = new Date().toISOString();
+                    renderResults();
+                    break;
+            }
+        }
+
+        function updateRouteStatus(routeId, status) {
+            const r = routes.find(x => x.id === routeId);
+            if (r) r.status = status;
+        }
+
+        // ======= Preventive pause countdown =======
+        let preventiveTimer = null;
+        function startPreventiveCountdown(seconds, retryAt, accountId) {
+            stopPreventiveCountdown();
+            const banner = document.getElementById('preventiveBanner');
+            const msg = document.getElementById('preventiveMsg');
+            const cd = document.getElementById('preventiveCountdown');
+            const accLabel = accountId ? `Conta "${accountId}": ` : '';
+            msg.textContent = `${accLabel}Aguardando ${seconds}s antes de continuar (retoma ${retryAt}).`;
+            banner.classList.add('show');
+
+            let remaining = seconds;
+            const update = () => {
+                if (remaining <= 0) { stopPreventiveCountdown(); return; }
+                cd.textContent = ` ${remaining}s restantes`;
+                remaining -= 1;
+            };
+            update();
+            preventiveTimer = setInterval(update, 1000);
+        }
+        function stopPreventiveCountdown() {
+            if (preventiveTimer) { clearInterval(preventiveTimer); preventiveTimer = null; }
+            document.getElementById('preventiveBanner').classList.remove('show');
+            document.getElementById('preventiveCountdown').textContent = '';
+        }
+
+        // ======= Results filters/sort =======
+        // Must match backend month names (from search_engine.MONTH_NAMES_PT)
+        const MONTH_NAMES_PT = ['Janeiro','Fevereiro','Marco','Abril','Maio','Junho',
+                                'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+        function initMonthFilterDropdown() {
+            const select = document.getElementById('filterMonth');
+            // Keep first "Todos os meses" option, remove the rest
+            while (select.options.length > 1) select.remove(1);
+
+            const now = new Date();
+            let m = now.getMonth() + (now.getDate() > 15 ? 1 : 0);
+            let y = now.getFullYear();
+            if (m > 11) { m -= 12; y++; }
+
+            for (let i = 0; i < 12; i++) {
+                let mi = m + i, yi = y;
+                while (mi > 11) { mi -= 12; yi++; }
+                const name = `${MONTH_NAMES_PT[mi]} ${yi}`;
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+            }
+        }
+
+        function getMinPriceForMonth(result, monthName) {
+            if (!monthName) return getMinPrice(result);
+            let min = null;
+            for (const dirData of [result.outbound || {}, result.inbound || {}]) {
+                const days = dirData[monthName] || [];
+                for (const d of days) {
+                    if (typeof d === 'object' && d.price != null) {
+                        if (min === null || d.price < min) min = d.price;
+                    }
+                }
+            }
+            return min;
+        }
+
+        function onFilterChange() {
+            resultFilterOrigin = document.getElementById('filterOrigin').value.trim().toUpperCase();
+            resultFilterDest = document.getElementById('filterDest').value.trim().toUpperCase();
+            resultFilterMonth = document.getElementById('filterMonth').value;
+            resultSortMode = document.getElementById('sortMode').value;
+            renderResults();
+        }
+        function clearResultFilters() {
+            document.getElementById('filterOrigin').value = '';
+            document.getElementById('filterDest').value = '';
+            document.getElementById('filterMonth').value = '';
+            document.getElementById('sortMode').value = 'default';
+            onFilterChange();
+        }
+        function toggleExpand(routeId) {
+            if (expandedResults.has(routeId)) {
+                expandedResults.delete(routeId);
+            } else {
+                expandedResults.add(routeId);
+            }
+            // Rerender only this card to preserve scroll position
+            const route = routes.find(r => r.id === routeId);
+            const result = results[routeId];
+            if (route && result) {
+                const el = document.getElementById('result-' + routeId);
+                if (el) {
+                    el.outerHTML = renderResultCard(routeId, result, route);
+                }
+            }
+        }
+
+        // ======= Pause/Resume =======
+        async function togglePause() {
+            const endpoint = systemPaused ? '/api/system/resume' : '/api/system/pause';
+            await fetch(endpoint, { method: 'POST' });
+            // WebSocket event will update UI
+        }
+        function updatePauseUI() {
+            const btn = document.getElementById('pauseBtn');
+            const banner = document.getElementById('pausedBanner');
+            if (systemPaused) {
+                btn.textContent = 'Retomar';
+                btn.classList.add('resume');
+                banner.classList.add('show');
+            } else {
+                btn.textContent = 'Pausar';
+                btn.classList.remove('resume');
+                banner.classList.remove('show');
+            }
+        }
+
+        // ======= Accounts =======
+        async function addAccount() {
+            const id = document.getElementById('accId').value.trim();
+            const name = document.getElementById('accName').value.trim();
+            const notes = document.getElementById('accNotes').value.trim();
+            if (!id) { alert('Informe o ID da conta (ex: conta1)'); return; }
+            const resp = await fetch('/api/accounts', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ id, name: name || id, notes }),
+            });
+            if (resp.ok) {
+                document.getElementById('accId').value = '';
+                document.getElementById('accName').value = '';
+                document.getElementById('accNotes').value = '';
+            } else {
+                alert('Erro ao adicionar conta');
+            }
+        }
+
+        async function removeAccount(id) {
+            if (!confirm(`Remover a conta "${id}"?\n(O perfil do Chrome fica no disco, voce pode apagar depois)`)) return;
+            await fetch('/api/accounts/' + id, { method: 'DELETE' });
+        }
+
+        async function toggleAccount(id) {
+            await fetch(`/api/accounts/${id}/toggle`, { method: 'POST' });
+        }
+
+        async function skipCooldown(id) {
+            await fetch(`/api/accounts/${id}/skip-cooldown`, { method: 'POST' });
+        }
+
+        // Ticker that rerenders the accounts table every second while any
+        // account is in cooldown, so the countdown updates visually.
+        setInterval(() => {
+            const anyCooldown = accounts.some(a =>
+                a.status === 'cooldown' && a.cooldown_end_ts);
+            if (anyCooldown) renderAccounts();
+        }, 1000);
+
+        function renderAccounts() {
+            document.getElementById('accountsCount').textContent = accounts.length;
+            const tbody = document.getElementById('accountsTbody');
+            const noMsg = document.getElementById('noAccountsMsg');
+            if (accounts.length === 0) {
+                tbody.innerHTML = '';
+                noMsg.style.display = 'block';
+                return;
+            }
+            noMsg.style.display = 'none';
+
+            tbody.innerHTML = accounts.map(a => {
+                const status = a.status || (a.enabled ? 'idle' : 'disabled');
+
+                // Cooldown countdown (live from cooldown_end_ts)
+                let cooldownRemaining = null;
+                if (status === 'cooldown' && a.cooldown_end_ts) {
+                    cooldownRemaining = Math.max(0, Math.ceil((a.cooldown_end_ts - Date.now()) / 1000));
+                }
+
+                let statusLabel = {
+                    idle: 'Livre', searching: 'Buscando', blocked: 'Bloqueada',
+                    disabled: 'Desativada', cooldown: 'Cooldown'
+                }[status] || status;
+                if (cooldownRemaining !== null) {
+                    const mins = Math.floor(cooldownRemaining / 60);
+                    const secs = cooldownRemaining % 60;
+                    statusLabel = `Cooldown ${mins}:${String(secs).padStart(2,'0')}`;
+                }
+
+                const statusClass = {
+                    idle: 'status-completed', searching: 'status-searching',
+                    blocked: 'status-blocked', disabled: 'status-pending',
+                    cooldown: 'status-pending'
+                }[status] || 'status-pending';
+
+                const currentRoute = a.current_route_id
+                    ? (routes.find(r => r.id === a.current_route_id) || null)
+                    : null;
+                const routeLabel = currentRoute
+                    ? `${currentRoute.origin} -> ${currentRoute.dest}`
+                    : '-';
+
+                return `
+                <tr>
+                    <td>
+                        <div class="route-info">${escapeHtml(a.name || a.id)}</div>
+                        <div class="route-meta">${escapeHtml(a.id)}${a.notes ? ' | ' + escapeHtml(a.notes) : ''}</div>
+                    </td>
+                    <td>
+                        <div class="route-meta" style="font-family:monospace;font-size:11px">${escapeHtml(a.profile_dir)}</div>
+                    </td>
+                    <td>
+                        <span class="status-pill ${statusClass}">${statusLabel}</span>
+                        ${a.last_error ? `<div class="route-meta" style="color:#fca5a5">${escapeHtml(a.last_error)}</div>` : ''}
+                    </td>
+                    <td>
+                        <div class="route-meta">${routeLabel}</div>
+                    </td>
+                    <td>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap">
+                            ${status === 'cooldown' ? `
+                                <button class="btn btn-warning btn-sm" onclick="skipCooldown('${a.id}')">
+                                    Pular cooldown
+                                </button>
+                            ` : ''}
+                            <button class="btn btn-ghost btn-sm" onclick="toggleAccount('${a.id}')">
+                                ${a.enabled ? 'Desativar' : 'Ativar'}
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="removeAccount('${a.id}')">X</button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function fetchAllResults() {
+            for (const r of routes) {
+                if (r.has_result) {
+                    try {
+                        const resp = await fetch(`/api/results/${r.id}`);
+                        if (resp.ok) results[r.id] = await resp.json();
+                    } catch(e) {}
+                }
+            }
+            renderRoutes();
+            renderResults();
+        }
+
+        // ======= Actions =======
+        async function addRoute() {
+            const origin = document.getElementById('origin').value.trim().toUpperCase();
+            const dest = document.getElementById('dest').value.trim().toUpperCase();
+            const program = document.getElementById('program').value;
+            const cabin = document.getElementById('cabin').value;
+            const direction = document.querySelector('input[name="direction"]:checked').value;
+
+            if (!origin || !dest) { alert('Preencha Origem e Destino!'); return; }
+            if (monthMode === 'select' && selectedMonths.length === 0) {
+                alert('Selecione pelo menos um mes!'); return;
+            }
+
+            const resp = await fetch('/api/routes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    origin, dest, program, cabin, direction,
+                    months: monthMode === 'all' ? null : selectedMonths,
+                })
+            });
+            if (resp.ok) {
+                document.getElementById('origin').value = '';
+                document.getElementById('dest').value = '';
+            }
+        }
+
+        async function removeRoute(id) {
+            if (!confirm('Remover essa rota?')) return;
+            await fetch(`/api/routes/${id}`, { method: 'DELETE' });
+        }
+
+        async function enqueueRoute(id) {
+            await fetch(`/api/routes/${id}/enqueue`, { method: 'POST' });
+        }
+
+        async function retryRoute(id) {
+            await fetch(`/api/routes/${id}/retry`, { method: 'POST' });
+        }
+
+        async function enqueueAll() {
+            const resp = await fetch('/api/routes/enqueue-all', { method: 'POST' });
+            const d = await resp.json();
+            let msg = `${d.enqueued} rota(s) pendente(s) adicionada(s) na fila.`;
+            if (d.skipped_completed > 0) {
+                msg += `\n${d.skipped_completed} rota(s) ja conclu\u00edda(s) foram puladas.`;
+            }
+            alert(msg);
+        }
+
+        async function enqueueAllForce() {
+            const confirmMsg =
+                'Isso vai APAGAR todos os resultados existentes e refazer TODAS as rotas do zero.\n\n' +
+                'Tem certeza?';
+            if (!confirm(confirmMsg)) return;
+            const resp = await fetch('/api/routes/enqueue-all-force', { method: 'POST' });
+            const d = await resp.json();
+            alert(`${d.enqueued} rota(s) adicionada(s) na fila para refazer do zero.`);
+        }
+
+        async function sendWhatsApp(routeId) {
+            const filterInput = document.getElementById('filter-' + routeId);
+            const maxK = filterInput ? parseInt(filterInput.value) : null;
+            const btn = document.getElementById('wa-btn-' + routeId);
+            if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+            try {
+                const resp = await fetch(`/api/routes/${routeId}/send-whatsapp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ max_price_k: maxK || null }),
+                });
+                const d = await resp.json();
+                if (!d.sent) alert('Falha ao enviar WhatsApp');
+            } catch(e) {
+                alert('Erro: ' + e);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Enviar pro WhatsApp'; }
+            }
+        }
+
+        // ======= Render =======
+        function renderRoutes() {
+            document.getElementById('routesCount').textContent = routes.length;
+            const tbody = document.getElementById('routesTbody');
+            const noMsg = document.getElementById('noRoutesMsg');
+            if (routes.length === 0) {
+                tbody.innerHTML = '';
+                noMsg.style.display = 'block';
+                return;
+            }
+            noMsg.style.display = 'none';
+
+            const cabinShort = { economy: 'Eco', business: 'Exec', first: '1st' };
+            const dirShort = { roundtrip: 'ida+volta', outbound: 'so ida', inbound: 'so volta' };
+
+            tbody.innerHTML = routes.map(r => {
+                const progress = progressMap[r.id];
+                const statusKey = r.status || 'pending';
+                const monthsLabel = r.months ? `${r.months.length} meses` : 'ano todo';
+                const minPriceLabel = r.min_price_k !== null && r.min_price_k !== undefined
+                    ? `<span style="color:#34d399;font-weight:600">Menor: ${r.min_price_k}K</span>`
+                    : '';
+                return `
+                <tr>
+                    <td>
+                        <div class="route-info">${r.origin} -> ${r.dest}</div>
+                        <div class="route-meta">Cadastrada ${formatDate(r.created_at)}</div>
+                    </td>
+                    <td>
+                        <div class="route-meta">${r.program} | ${cabinShort[r.cabin]||'Eco'}</div>
+                        <div class="route-meta">${dirShort[r.direction]||'ida+volta'} | ${monthsLabel}</div>
+                        ${minPriceLabel ? `<div class="route-meta">${minPriceLabel}</div>` : ''}
+                    </td>
+                    <td>
+                        <span class="status-pill status-${statusKey}">${statusLabel(statusKey)}</span>
+                        ${r.last_error ? `<div class="route-meta" style="color:#fca5a5">${escapeHtml(r.last_error)}</div>` : ''}
+                    </td>
+                    <td>
+                        ${progress ? `
+                            ${progress.account_id ? `<div class="route-meta" style="color:#60a5fa">Conta: ${escapeHtml(progress.account_id)}</div>` : ''}
+                            <div class="route-meta">${escapeHtml(progress.message)}</div>
+                            <div class="progress-bar"><div class="fill" style="width:${progress.percent}%"></div></div>
+                        ` : ''}
+                    </td>
+                    <td>
+                        <div style="display:flex;gap:4px;flex-wrap:wrap">
+                            ${statusKey === 'searching' ? '' : `
+                                <button class="btn btn-ghost btn-sm" onclick="enqueueRoute('${r.id}')">Buscar</button>
+                            `}
+                            ${statusKey === 'completed' || statusKey === 'error' ? `
+                                <button class="btn btn-ghost btn-sm" onclick="retryRoute('${r.id}')">Refazer</button>
+                            ` : ''}
+                            <button class="btn btn-danger btn-sm" onclick="removeRoute('${r.id}')">X</button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        function updateProgressUI(routeId) {
+            // Rerender just this row's progress cell
+            renderRoutes();
+        }
+
+        function renderResults() {
+            const list = document.getElementById('resultsList');
+            const resIds = Object.keys(results);
+            document.getElementById('resultsCount').textContent = resIds.length;
+
+            if (resIds.length === 0) {
+                list.innerHTML = `<div class="empty-state"><div class="icon">...</div><p>Nenhum resultado ainda.<br>Cadastre rotas e inicie a busca.</p></div>`;
+                return;
+            }
+
+            // Build list with price info for sorting.
+            // If a month filter is active, use the per-month min price;
+            // otherwise use the overall min price.
+            let items = resIds
+                .map(id => {
+                    const route = routes.find(x => x.id === id);
+                    if (!route) return null;
+                    const result = results[id];
+                    const minPrice = resultFilterMonth
+                        ? getMinPriceForMonth(result, resultFilterMonth)
+                        : getMinPrice(result);
+                    return { id, result, route, minPrice };
+                })
+                .filter(x => x);
+
+            // Apply filters (origin/dest)
+            if (resultFilterOrigin) {
+                items = items.filter(x => x.route.origin.includes(resultFilterOrigin));
+            }
+            if (resultFilterDest) {
+                items = items.filter(x => x.route.dest.includes(resultFilterDest));
+            }
+            // If a month filter is active, only show routes that have data in that month
+            if (resultFilterMonth) {
+                items = items.filter(x => x.minPrice != null);
+            }
+
+            // Apply sort
+            const INF = Number.POSITIVE_INFINITY;
+            if (resultSortMode === 'price-asc') {
+                items.sort((a,b) => (a.minPrice ?? INF) - (b.minPrice ?? INF));
+            } else if (resultSortMode === 'price-desc') {
+                items.sort((a,b) => (b.minPrice ?? -1) - (a.minPrice ?? -1));
+            } else if (resultSortMode === 'route-asc') {
+                items.sort((a,b) => {
+                    const ka = `${a.route.origin}-${a.route.dest}`;
+                    const kb = `${b.route.origin}-${b.route.dest}`;
+                    return ka.localeCompare(kb);
+                });
+            } else {
+                // default: most recent first
+                items.sort((a,b) =>
+                    (b.result.searched_at||'').localeCompare(a.result.searched_at||''));
+            }
+
+            if (items.length === 0) {
+                list.innerHTML = `<div class="empty-state"><div class="icon">!</div><p>Nenhum resultado corresponde aos filtros.</p></div>`;
+                return;
+            }
+
+            list.innerHTML = items.map(({id, result, route}) => renderResultCard(id, result, route)).join('');
+        }
+
+        // Per-result filter state (routeId -> selected max K)
+        const resultFilters = {};
+
+        function getMinPrice(result) {
+            let min = null;
+            for (const dirData of [result.outbound || {}, result.inbound || {}]) {
+                for (const days of Object.values(dirData)) {
+                    for (const d of days) {
+                        if (typeof d === 'object' && d.price != null) {
+                            if (min === null || d.price < min) min = d.price;
+                        }
+                    }
+                }
+            }
+            return min;
+        }
+
+        function renderResultCard(routeId, result, route) {
+            const dir = result.direction || 'roundtrip';
+            const cabinNames = { economy: 'Eco', business: 'Exec', first: '1st' };
+            const cabinLabel = cabinNames[result.cabin] || 'Eco';
+            const arrow = dir === 'roundtrip' ? '<->' : '->';
+            const routeLabel = dir === 'inbound'
+                ? `${result.dest} -> ${result.origin}`
+                : `${result.origin} ${arrow} ${result.dest}`;
+            const dirLabel = dir === 'outbound' ? ' | So ida' : dir === 'inbound' ? ' | So volta' : '';
+
+            const waSent = route && route.whatsapp_sent_at;
+            const waBadge = waSent ? `<span class="wa-sent-badge">WhatsApp enviado</span>` : '';
+
+            // Use the month-specific min price if a month filter is active
+            const minPrice = resultFilterMonth
+                ? getMinPriceForMonth(result, resultFilterMonth)
+                : getMinPrice(result);
+            const expanded = expandedResults.has(routeId);
+
+            let minPriceChip;
+            if (minPrice != null) {
+                const chipLabel = resultFilterMonth
+                    ? `Menor em ${resultFilterMonth.split(' ')[0]}: ${minPrice}K`
+                    : `Menor: ${minPrice}K`;
+                minPriceChip = `<span class="min-price-chip">${chipLabel}</span>`;
+            } else {
+                minPriceChip = `<span class="min-price-chip none">Sem datas</span>`;
+            }
+
+            // Collapsed header (clickable)
+            const header = `
+                <div class="result-card-clickable" onclick="toggleExpand('${routeId}')">
+                    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+                        <h3>${routeLabel}</h3>
+                        <span style="font-size:12px;color:#94a3b8">${result.program}, ${cabinLabel}${dirLabel}</span>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        ${minPriceChip}
+                        ${waBadge}
+                        <span class="chevron">\u25BE</span>
+                    </div>
+                </div>`;
+
+            if (!expanded) {
+                return `<div class="result-card" id="result-${routeId}">${header}</div>`;
+            }
+
+            // Expanded body
+            const currentFilter = resultFilters[routeId] != null
+                ? resultFilters[routeId]
+                : (minPrice != null ? minPrice : 999);
+
+            const outbound = processDirection(result.outbound, currentFilter);
+            const inbound = processDirection(result.inbound, currentFilter);
+
+            let directions = '';
+            if (dir === 'roundtrip' || dir === 'outbound') {
+                directions += `
+                <div class="direction">
+                    <div class="direction-label">IDA (${result.origin} -> ${result.dest})</div>
+                    ${outbound.html}${outbound.cheapestHtml}
+                </div>`;
+            }
+            if (dir === 'roundtrip' || dir === 'inbound') {
+                directions += `
+                <div class="direction">
+                    <div class="direction-label return">VOLTA (${result.dest} -> ${result.origin})</div>
+                    ${inbound.html}${inbound.cheapestHtml}
+                </div>`;
+            }
+
+            return `
+            <div class="result-card expanded" id="result-${routeId}">
+                ${header}
+                <div class="result-card-body">
+                    <div style="padding:12px;background:#0f172a;border-radius:8px;margin-bottom:12px;
+                                display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                        <div style="font-size:12px;color:#94a3b8">
+                            Buscado em: <span style="color:#cbd5e1">${result.searched_at||'-'}</span>
+                        </div>
+                        <div style="flex:1;min-width:220px;display:flex;align-items:center;gap:8px">
+                            <label style="font-size:12px;color:#94a3b8">Datas abaixo de</label>
+                            <input type="number" id="filter-${routeId}" value="${currentFilter}" min="1"
+                                   onchange="updateFilter('${routeId}', this.value)"
+                                   onclick="event.stopPropagation()"
+                                   style="width:80px;background:#1e293b;border:1px solid #334155;border-radius:6px;
+                                          padding:6px 10px;color:#e2e8f0;font-size:13px">
+                            <label style="font-size:12px;color:#94a3b8">K milhas</label>
+                        </div>
+                        <button class="btn btn-success btn-sm" id="wa-btn-${routeId}"
+                                onclick="event.stopPropagation(); sendWhatsApp('${routeId}')">
+                            Enviar pro WhatsApp
+                        </button>
+                    </div>
+                    ${directions}
+                </div>
+            </div>`;
+        }
+
+        function updateFilter(routeId, value) {
+            const v = parseInt(value);
+            if (isNaN(v) || v < 1) return;
+            resultFilters[routeId] = v;
+            // Rerender only this card
+            const route = routes.find(r => r.id === routeId);
+            const result = results[routeId];
+            if (route && result) {
+                const el = document.getElementById('result-' + routeId);
+                if (el) {
+                    el.outerHTML = renderResultCard(routeId, result, route);
+                }
+            }
+        }
+
+        function processDirection(data, maxK) {
+            if (!data || Object.keys(data).length === 0) {
+                return { html: '<div class="no-data">Nenhuma data encontrada</div>', cheapestHtml: '' };
+            }
+            let allLines = '';
+            let cheapestPrice = null;
+            let cheapestByMonth = {};
+            for (const [month, days] of Object.entries(data)) {
+                if (days.length === 0) continue;
+                if (typeof days[0] === 'object') {
+                    // Render each day with its price, color-code if below filter
+                    const parts = days.map(d => {
+                        const isUnder = d.price <= maxK;
+                        const color = isUnder ? '#6ee7b7' : '#64748b';
+                        const weight = isUnder ? '600' : 'normal';
+                        return `<span style="color:${color};font-weight:${weight}">${d.day} (${d.price}K)</span>`;
+                    });
+                    allLines += `<div class="month-row"><span class="month-name">${month}:</span> ${parts.join(', ')}</div>`;
+
+                    // Track cheapest (from days that pass filter)
+                    const filtered = days.filter(d => d.price <= maxK);
+                    for (const d of filtered) {
+                        if (cheapestPrice === null || d.price < cheapestPrice) {
+                            cheapestPrice = d.price; cheapestByMonth = {};
+                        }
+                        if (d.price === cheapestPrice) {
+                            if (!cheapestByMonth[month]) cheapestByMonth[month] = [];
+                            cheapestByMonth[month].push(d.day);
+                        }
+                    }
+                } else {
+                    allLines += `<div class="month-row"><span class="month-name">${month}:</span> ${days.join(', ')}</div>`;
+                }
+            }
+            let cheapestHtml = '';
+            if (cheapestPrice !== null) {
+                const parts = [];
+                for (const [month, days] of Object.entries(cheapestByMonth)) {
+                    parts.push(`${month}: ${days.join(', ')}`);
+                }
+                cheapestHtml = `<div class="cheapest"><b>Mais baratas (${cheapestPrice}K):</b> <span class="dates">${parts.join(' | ')}</span></div>`;
+            }
+            return { html: allLines, cheapestHtml };
+        }
+
+        // ======= Utils =======
+        function statusLabel(s) {
+            return {
+                pending: 'Pendente', searching: 'Buscando...',
+                completed: 'Concluida', error: 'Erro', blocked: 'Bloqueado'
+            }[s] || s;
+        }
+        function formatDate(iso) {
+            if (!iso) return '-';
+            const d = new Date(iso);
+            return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+        }
+        function escapeHtml(s) {
+            return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        // Enter key submits add route
+        document.querySelectorAll('.form-group input').forEach(el => {
+            el.addEventListener('keydown', e => { if (e.key === 'Enter') addRoute(); });
+        });
+
+        initMonthFilterDropdown();
+        connectWS();
+    </script>
+</body>
+</html>

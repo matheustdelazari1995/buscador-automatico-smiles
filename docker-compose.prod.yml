@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: smiles-app
+    restart: unless-stopped
+    shm_size: '2gb'  # Chrome precisa de shared memory
+    volumes:
+      # Perfis dos Chromes (login persistente das contas)
+      - ./profiles:/app/profiles
+      # Dados persistentes (routes.json, results.json, accounts.json, system_state.json)
+      - ./data:/app/data
+      - ./config.json:/app/config.json:ro
+    expose:
+      - "8001"   # app (interno)
+      - "6080"   # noVNC (interno)
+    # Nada exposto direto na internet. Tudo passa pelo nginx.
+
+  nginx:
+    image: nginx:alpine
+    container_name: smiles-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/htpasswd:/etc/nginx/htpasswd:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - app
+
+  certbot:
+    image: certbot/certbot
+    container_name: smiles-certbot
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    # Renova certificados a cada 12h (silenciosamente se não precisar)
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done;'"

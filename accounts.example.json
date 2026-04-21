@@ -1,0 +1,18 @@
+[
+  {
+    "id": "conta1",
+    "email": "usuario1@email.com",
+    "password": "senha_aqui",
+    "profile_dir": "./profiles/conta1",
+    "status": "active",
+    "notes": "Conta principal"
+  },
+  {
+    "id": "conta2",
+    "email": "usuario2@email.com",
+    "password": "senha_aqui",
+    "profile_dir": "./profiles/conta2",
+    "status": "active",
+    "notes": ""
+  }
+]

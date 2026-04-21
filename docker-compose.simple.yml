@@ -1,0 +1,19 @@
+version: '3.8'
+
+# Versao SIMPLES: sem nginx, sem HTTPS, sem dominio.
+# Expoe app em IP:8001 e noVNC em IP:6080 direto.
+# Use enquanto nao tem dominio. Migrar pra docker-compose.prod.yml depois.
+
+services:
+  app:
+    build: .
+    container_name: smiles-app
+    restart: unless-stopped
+    shm_size: '2gb'
+    volumes:
+      - ./profiles:/app/profiles
+      - ./data:/app/data
+      - ./config.json:/app/config.json:ro
+    ports:
+      - "8001:8001"   # dashboard
+      - "6080:6080"   # noVNC (Chrome via browser)
