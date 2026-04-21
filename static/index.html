@@ -458,6 +458,22 @@
                     </div>
                     <button class="btn btn-primary" onclick="addAccount()">+ Adicionar</button>
                 </div>
+
+                <div class="form-row" style="grid-template-columns: 2fr 1fr 1fr; margin-top:10px">
+                    <div class="form-group">
+                        <label>Proxy (opcional) - formato: http://host:port</label>
+                        <input type="text" id="accProxyServer" placeholder="http://proxy.iproyal.com:12321">
+                    </div>
+                    <div class="form-group">
+                        <label>Proxy user</label>
+                        <input type="text" id="accProxyUser" placeholder="usuario (opcional)">
+                    </div>
+                    <div class="form-group">
+                        <label>Proxy password</label>
+                        <input type="password" id="accProxyPass" placeholder="senha (opcional)">
+                    </div>
+                </div>
+
                 <div style="margin-top:12px;padding:12px;background:#0f172a;border-radius:8px;
                             font-size:12px;color:#94a3b8;border-left:3px solid #2563eb">
                     <b>Como fazer login nessa conta:</b><br>
@@ -474,7 +490,7 @@
                     <thead>
                         <tr>
                             <th>Conta</th>
-                            <th>Perfil Chrome</th>
+                            <th>Proxy</th>
                             <th>Status</th>
                             <th>Rota atual</th>
                             <th>Acoes</th>
@@ -838,19 +854,74 @@
             const id = document.getElementById('accId').value.trim();
             const name = document.getElementById('accName').value.trim();
             const notes = document.getElementById('accNotes').value.trim();
+            const proxyServer = document.getElementById('accProxyServer').value.trim();
+            const proxyUser = document.getElementById('accProxyUser').value.trim();
+            const proxyPass = document.getElementById('accProxyPass').value;
             if (!id) { alert('Informe o ID da conta (ex: conta1)'); return; }
+            const payload = {
+                id, name: name || id, notes,
+                proxy_server: proxyServer || null,
+                proxy_user: proxyUser || null,
+                proxy_pass: proxyPass || null,
+            };
             const resp = await fetch('/api/accounts', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ id, name: name || id, notes }),
+                body: JSON.stringify(payload),
             });
             if (resp.ok) {
                 document.getElementById('accId').value = '';
                 document.getElementById('accName').value = '';
                 document.getElementById('accNotes').value = '';
+                document.getElementById('accProxyServer').value = '';
+                document.getElementById('accProxyUser').value = '';
+                document.getElementById('accProxyPass').value = '';
             } else {
                 alert('Erro ao adicionar conta');
             }
+        }
+
+        async function testProxy(id) {
+            const btn = document.getElementById('proxy-test-' + id);
+            if (btn) { btn.disabled = true; btn.textContent = 'Testando...'; }
+            try {
+                const resp = await fetch(`/api/accounts/${id}/test-proxy`, { method: 'POST' });
+                const d = await resp.json();
+                if (d.ok) {
+                    alert(`Proxy OK! IP externo detectado: ${d.ip}`);
+                } else {
+                    alert(`Falha no proxy: ${d.error}`);
+                }
+            } catch(e) {
+                alert('Erro: ' + e);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'Testar proxy'; }
+            }
+        }
+
+        async function editProxy(id) {
+            const acc = accounts.find(a => a.id === id);
+            if (!acc) return;
+            const newServer = prompt(
+                'Proxy server (vazio pra remover) - formato: http://host:port',
+                acc.proxy_server || ''
+            );
+            if (newServer === null) return; // cancelou
+            const newUser = prompt('Proxy username (vazio se sem auth)', acc.proxy_user || '');
+            if (newUser === null) return;
+            const newPass = prompt('Proxy password (vazio se sem auth)', acc.proxy_pass || '');
+            if (newPass === null) return;
+
+            await fetch(`/api/accounts/${id}/proxy`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    proxy_server: newServer || null,
+                    proxy_user: newUser || null,
+                    proxy_pass: newPass || null,
+                }),
+            });
+            alert('Proxy atualizado. Desative e reative a conta pra aplicar.');
         }
 
         async function removeAccount(id) {
@@ -917,14 +988,20 @@
                     ? `${currentRoute.origin} -> ${currentRoute.dest}`
                     : '-';
 
+                const proxyHtml = a.proxy_server
+                    ? `<div class="route-meta" style="font-family:monospace;font-size:11px;color:#6ee7b7">${escapeHtml(a.proxy_server)}</div>
+                       <div class="route-meta" style="font-size:10px">${a.proxy_user ? 'user: ' + escapeHtml(a.proxy_user) : 'sem auth'}</div>`
+                    : `<div class="route-meta" style="color:#f59e0b">Sem proxy (IP direto)</div>`;
+
                 return `
                 <tr>
                     <td>
                         <div class="route-info">${escapeHtml(a.name || a.id)}</div>
                         <div class="route-meta">${escapeHtml(a.id)}${a.notes ? ' | ' + escapeHtml(a.notes) : ''}</div>
+                        <div class="route-meta" style="font-family:monospace;font-size:10px;color:#64748b">${escapeHtml(a.profile_dir)}</div>
                     </td>
                     <td>
-                        <div class="route-meta" style="font-family:monospace;font-size:11px">${escapeHtml(a.profile_dir)}</div>
+                        ${proxyHtml}
                     </td>
                     <td>
                         <span class="status-pill ${statusClass}">${statusLabel}</span>
@@ -938,6 +1015,14 @@
                             ${status === 'cooldown' ? `
                                 <button class="btn btn-warning btn-sm" onclick="skipCooldown('${a.id}')">
                                     Pular cooldown
+                                </button>
+                            ` : ''}
+                            <button class="btn btn-ghost btn-sm" onclick="editProxy('${a.id}')">
+                                Editar proxy
+                            </button>
+                            ${a.proxy_server ? `
+                                <button class="btn btn-ghost btn-sm" id="proxy-test-${a.id}" onclick="testProxy('${a.id}')">
+                                    Testar proxy
                                 </button>
                             ` : ''}
                             <button class="btn btn-ghost btn-sm" onclick="toggleAccount('${a.id}')">

@@ -114,7 +114,10 @@ JS_EXTRACT_TEMPLATE = """
 
 
 class AwardToolSearchEngine:
-    def __init__(self, profile_dir=None, account_id=None):
+    def __init__(self, profile_dir=None, account_id=None, proxy=None):
+        """
+        proxy: dict with {"server": "http://...", "username": "...", "password": "..."} or None.
+        """
         self.playwright = None
         self.context = None
         self.page = None
@@ -123,6 +126,7 @@ class AwardToolSearchEngine:
         self.pause_cb = None  # optional: async fn(seconds) called before long pause
         self.profile_dir = profile_dir or ".browser-profile"
         self.account_id = account_id or "default"
+        self.proxy = proxy  # {"server", "username", "password"} or None
 
     async def start(self):
         if self._started:
@@ -134,22 +138,33 @@ class AwardToolSearchEngine:
             browser_profile = os.path.join(os.path.dirname(__file__), self.profile_dir)
         os.makedirs(browser_profile, exist_ok=True)
         self.playwright = await async_playwright().__aenter__()
-        # Use the real Chrome installed on the system (not Chromium test binary)
-        # This avoids bot detection since it's the actual Chrome browser
-        self.context = await self.playwright.chromium.launch_persistent_context(
-            browser_profile,
-            channel="chrome",
-            headless=False,
-            viewport={"width": 1920, "height": 1080},
-            args=[
+
+        # Build launch kwargs - adds proxy only if configured
+        launch_kwargs = {
+            "channel": "chrome",
+            "headless": False,
+            "viewport": {"width": 1920, "height": 1080},
+            "args": [
                 "--disable-blink-features=AutomationControlled",
                 "--no-first-run",
                 "--no-default-browser-check",
             ],
+        }
+        if self.proxy and self.proxy.get("server"):
+            launch_kwargs["proxy"] = self.proxy
+            proxy_info = self.proxy["server"]
+        else:
+            proxy_info = "sem proxy (IP direto)"
+
+        # Use the real Chrome installed on the system (not Chromium test binary)
+        # This avoids bot detection since it's the actual Chrome browser
+        self.context = await self.playwright.chromium.launch_persistent_context(
+            browser_profile,
+            **launch_kwargs,
         )
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
         self._started = True
-        print(f"[Engine {self.account_id}] Chrome iniciado com perfil {browser_profile}")
+        print(f"[Engine {self.account_id}] Chrome iniciado com perfil {browser_profile} - {proxy_info}")
 
     async def stop(self):
         if self.context:
@@ -517,6 +532,34 @@ def format_result_text(result, max_price_filter=None):
             lines.append("Nenhuma data encontrada")
 
     return "\n".join(lines)
+
+
+async def test_proxy(proxy_server, proxy_user=None, proxy_pass=None, timeout=10):
+    """
+    Tests a proxy by making a request to ipify.org.
+    Returns dict: {"ok": bool, "ip": str, "error": str}
+    """
+    import aiohttp
+    proxy_url = proxy_server
+    auth = None
+    if proxy_user:
+        auth = aiohttp.BasicAuth(proxy_user, proxy_pass or "")
+    try:
+        timeout_cfg = aiohttp.ClientTimeout(total=timeout)
+        async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
+            async with session.get(
+                "https://api.ipify.org?format=json",
+                proxy=proxy_url,
+                proxy_auth=auth,
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return {"ok": True, "ip": data.get("ip"), "error": None}
+                return {"ok": False, "ip": None, "error": f"HTTP {resp.status}"}
+    except asyncio.TimeoutError:
+        return {"ok": False, "ip": None, "error": "Timeout (>10s)"}
+    except Exception as e:
+        return {"ok": False, "ip": None, "error": str(e)}
 
 
 async def send_whatsapp(text, config):

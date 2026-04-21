@@ -23,6 +23,7 @@ from search_engine import (
     format_result_text,
     send_whatsapp,
     get_min_price,
+    test_proxy,
 )
 from routes_store import RoutesStore
 from accounts_store import AccountsStore
@@ -72,6 +73,15 @@ class AccountIn(BaseModel):
     profile_dir: Optional[str] = None
     enabled: bool = True
     notes: str = ""
+    proxy_server: Optional[str] = None   # e.g. "http://proxy.iproyal.com:12321"
+    proxy_user: Optional[str] = None
+    proxy_pass: Optional[str] = None
+
+
+class ProxyUpdateIn(BaseModel):
+    proxy_server: Optional[str] = None
+    proxy_user: Optional[str] = None
+    proxy_pass: Optional[str] = None
 
 
 class WhatsAppRequest(BaseModel):
@@ -97,9 +107,18 @@ async def account_worker(account_id: str):
     if not account:
         return
 
+    # Build proxy config (only if server is set)
+    proxy_cfg = None
+    if account.get("proxy_server"):
+        proxy_cfg = {"server": account["proxy_server"]}
+        if account.get("proxy_user"):
+            proxy_cfg["username"] = account["proxy_user"]
+            proxy_cfg["password"] = account.get("proxy_pass") or ""
+
     engine = AwardToolSearchEngine(
         profile_dir=account["profile_dir"],
         account_id=account_id,
+        proxy=proxy_cfg,
     )
     engines[account_id] = engine
 
@@ -412,6 +431,39 @@ async def remove_account(account_id: str):
         raise HTTPException(404, "Account not found")
     await broadcast({"type": "account_removed", "account_id": account_id})
     return {"ok": True}
+
+
+@app.put("/api/accounts/{account_id}/proxy")
+async def update_account_proxy(account_id: str, req: ProxyUpdateIn):
+    """Atualiza configuracao de proxy de uma conta.
+    IMPORTANTE: a conta precisa ser reiniciada (desativar e reativar) para usar o novo proxy."""
+    acc = await accounts_store.get_account(account_id)
+    if not acc:
+        raise HTTPException(404, "Account not found")
+    updated = await accounts_store.update_proxy(
+        account_id,
+        req.proxy_server,
+        req.proxy_user,
+        req.proxy_pass,
+    )
+    await broadcast({"type": "account_updated", "account": updated})
+    return updated
+
+
+@app.post("/api/accounts/{account_id}/test-proxy")
+async def test_account_proxy(account_id: str):
+    """Testa conectividade do proxy da conta. Retorna o IP externo detectado."""
+    acc = await accounts_store.get_account(account_id)
+    if not acc:
+        raise HTTPException(404, "Account not found")
+    if not acc.get("proxy_server"):
+        return {"ok": False, "error": "Sem proxy configurado", "ip": None}
+    result = await test_proxy(
+        acc["proxy_server"],
+        acc.get("proxy_user"),
+        acc.get("proxy_pass"),
+    )
+    return result
 
 
 @app.post("/api/accounts/{account_id}/skip-cooldown")

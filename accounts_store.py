@@ -26,12 +26,16 @@ class AccountsStore:
                     self.accounts = json.load(f)
             except Exception:
                 self.accounts = []
-        # Ensure runtime fields exist on every loaded account
+        # Ensure runtime + proxy fields exist on every loaded account
         for a in self.accounts:
             a.setdefault("status", "idle")
             a.setdefault("current_route_id", None)
             a.setdefault("blocked_until", None)
             a.setdefault("last_error", None)
+            # Proxy fields (all optional - if None/empty, no proxy is used)
+            a.setdefault("proxy_server", None)   # e.g. "http://proxy.iproyal.com:12321"
+            a.setdefault("proxy_user", None)
+            a.setdefault("proxy_pass", None)
 
     async def _save(self):
         with open(ACCOUNTS_FILE, "w") as f:
@@ -58,6 +62,10 @@ class AccountsStore:
                 "enabled": data.get("enabled", True),
                 "notes": data.get("notes", ""),
                 "created_at": datetime.now().isoformat(),
+                # Proxy (None = no proxy, direct VPS IP)
+                "proxy_server": data.get("proxy_server") or None,
+                "proxy_user": data.get("proxy_user") or None,
+                "proxy_pass": data.get("proxy_pass") or None,
                 # Runtime fields
                 "status": "idle",  # idle, searching, blocked, disabled
                 "current_route_id": None,
@@ -67,6 +75,19 @@ class AccountsStore:
             self.accounts.append(account)
             await self._save()
             return account
+
+    async def update_proxy(self, account_id, proxy_server, proxy_user, proxy_pass):
+        """Update proxy fields for an account.
+        Pass None/empty strings to clear (direct connection)."""
+        async with self._lock:
+            for a in self.accounts:
+                if a["id"] == account_id:
+                    a["proxy_server"] = proxy_server or None
+                    a["proxy_user"] = proxy_user or None
+                    a["proxy_pass"] = proxy_pass or None
+                    await self._save()
+                    return dict(a)
+            return None
 
     async def remove_account(self, account_id):
         async with self._lock:
