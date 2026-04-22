@@ -601,6 +601,20 @@ async def get_result(route_id: str):
     return result
 
 
+@app.post("/api/routes/{route_id}/whatsapp-text")
+async def preview_whatsapp_text(route_id: str, req: WhatsAppRequest = WhatsAppRequest()):
+    """Retorna o texto formatado que SERIA enviado pro WhatsApp (sem enviar).
+    Usado pelo botao 'Copiar texto' no frontend."""
+    route = await routes_store.get_route(route_id)
+    if not route:
+        raise HTTPException(404, "Route not found")
+    result = await routes_store.get_result(route_id)
+    if not result:
+        raise HTTPException(400, "Sem resultado pra formatar")
+    text = format_result_text(result, max_price_filter=req.max_price_k)
+    return {"text": text}
+
+
 @app.post("/api/routes/{route_id}/send-whatsapp")
 async def send_whatsapp_for_route(route_id: str, req: WhatsAppRequest = WhatsAppRequest()):
     route = await routes_store.get_route(route_id)

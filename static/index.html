@@ -1128,6 +1128,37 @@
             }
         }
 
+        async function copyWhatsAppText(routeId) {
+            const filterInput = document.getElementById('filter-' + routeId);
+            const maxK = filterInput ? parseInt(filterInput.value) : null;
+            const btn = document.getElementById('copy-btn-' + routeId);
+            const originalText = btn ? btn.textContent : 'Copiar texto';
+            if (btn) { btn.disabled = true; btn.textContent = 'Copiando...'; }
+            try {
+                const resp = await fetch(`/api/routes/${routeId}/whatsapp-text`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ max_price_k: maxK || null }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    alert('Erro: ' + (err.detail || 'Falha ao gerar texto'));
+                    return;
+                }
+                const d = await resp.json();
+                await navigator.clipboard.writeText(d.text);
+                if (btn) {
+                    btn.textContent = 'Copiado!';
+                    setTimeout(() => { if (btn) btn.textContent = originalText; }, 2000);
+                }
+            } catch(e) {
+                alert('Erro ao copiar: ' + e);
+                if (btn) btn.textContent = originalText;
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
         // ======= Render =======
         function renderRoutes() {
             document.getElementById('routesCount').textContent = routes.length;
@@ -1361,6 +1392,10 @@
                                           padding:6px 10px;color:#e2e8f0;font-size:13px">
                             <label style="font-size:12px;color:#94a3b8">K milhas</label>
                         </div>
+                        <button class="btn btn-ghost btn-sm" id="copy-btn-${routeId}"
+                                onclick="event.stopPropagation(); copyWhatsAppText('${routeId}')">
+                            Copiar texto
+                        </button>
                         <button class="btn btn-success btn-sm" id="wa-btn-${routeId}"
                                 onclick="event.stopPropagation(); sendWhatsApp('${routeId}')">
                             Enviar pro WhatsApp
