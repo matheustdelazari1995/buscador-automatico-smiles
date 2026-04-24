@@ -46,13 +46,18 @@ def load_config():
 
 
 # ===== State =====
-search_queue = None
 active_connections = []
 routes_store: Optional[RoutesStore] = None
 accounts_store: Optional[AccountsStore] = None
 engines = {}         # account_id -> AwardToolSearchEngine
 worker_tasks = {}    # account_id -> asyncio.Task
-queue_items = []     # route_ids in queue
+
+# Fila ordenada de rotas. Pode ser reordenada a qualquer momento.
+# Workers pegam o PRIMEIRO item. Condition permite aguardar eficientemente
+# quando a lista esta vazia e tambem permite notificar apos reordenar.
+queue_items = []     # route_ids in queue (ordered)
+queue_cond = None    # asyncio.Condition (lock + wait/notify)
+
 system_state: Optional[SystemState] = None
 cooldown_skip_events = {}  # account_id -> asyncio.Event (set to skip cooldown)
 
@@ -171,34 +176,36 @@ async def account_worker(account_id: str):
                 await broadcast({"type": "account_resumed", "account_id": account_id})
 
         # Decide which route to process next
-        from_queue = False
         if pending_retry_route_id is not None:
-            # Resume the route that was blocked
+            # Resume the route that was blocked (doesn't come from queue)
             route_id = pending_retry_route_id
             pending_retry_route_id = None
         else:
-            # Pick next route from queue
-            try:
-                route_id = await asyncio.wait_for(search_queue.get(), timeout=2.0)
-                from_queue = True
-            except asyncio.TimeoutError:
-                continue
+            # Pop the first route from queue_items (ordered list).
+            # Wait on queue_cond if queue is empty.
+            async with queue_cond:
+                # Wait until there's something in the queue (with short timeout
+                # so we can re-check pause/enabled/blocked flags periodically)
+                if not queue_items:
+                    try:
+                        await asyncio.wait_for(queue_cond.wait(), timeout=2.0)
+                    except asyncio.TimeoutError:
+                        continue
+                if not queue_items:
+                    continue
+                route_id = queue_items.pop(0)
+            await broadcast({"type": "queue_updated", "queue": list(queue_items)})
 
         route = await routes_store.get_route(route_id)
         if not route:
-            search_queue.task_done()
             continue
 
         # Skip if already completed (stale queue entry from duplicate enqueue)
         if route.get("status") == "completed" and not route.get("is_partial"):
-            if route_id in queue_items:
-                queue_items.remove(route_id)
-            search_queue.task_done()
             continue
 
         # Skip if being processed by another worker
         if route.get("status") == "searching":
-            search_queue.task_done()
             continue
 
         # Claim the route
@@ -210,9 +217,6 @@ async def account_worker(account_id: str):
             "status": "searching",
             "account_id": account_id,
         })
-
-        # Flag used to skip the finally's queue_items.remove when we re-queue
-        requeued = False
 
         async def progress_cb(step, total, msg):
             pct = round((step / total) * 100)
@@ -319,10 +323,9 @@ async def account_worker(account_id: str):
                 "status": "pending",
                 "account_id": None,
             })
-            requeued = True
             pending_retry_route_id = route_id
-            # NOTE: we DO NOT re-queue via search_queue.put() anymore — the
-            # worker keeps the route locally and resumes it after unblock.
+            # NOTE: worker keeps the route locally (pending_retry) and resumes
+            # it after unblock. Not re-added to queue_items.
 
         except Exception as e:
             await routes_store.update_status(route_id, "error", str(e))
@@ -334,15 +337,7 @@ async def account_worker(account_id: str):
                 "error": str(e),
             })
 
-        finally:
-            # Only remove from queue_items if route actually finished
-            # (not re-queued for retry after a block)
-            if not requeued and route_id in queue_items:
-                queue_items.remove(route_id)
-            # Only mark queue task done if we actually consumed from the queue
-            # (pending retries reuse the same route without a new get())
-            if from_queue:
-                search_queue.task_done()
+        # Nothing to clean up in queue_items - route was already popped when picked.
 
 
 async def start_worker_for_account(account_id: str):
@@ -362,8 +357,8 @@ async def stop_worker_for_account(account_id: str):
 # ===== Startup =====
 @app.on_event("startup")
 async def startup():
-    global search_queue, routes_store, accounts_store, system_state
-    search_queue = asyncio.Queue()
+    global queue_cond, routes_store, accounts_store, system_state
+    queue_cond = asyncio.Condition()
     routes_store = RoutesStore()
     accounts_store = AccountsStore()
     system_state = SystemState()
@@ -518,9 +513,11 @@ async def remove_route(route_id: str):
     ok = await routes_store.remove_route(route_id)
     if not ok:
         raise HTTPException(404, "Route not found")
-    if route_id in queue_items:
-        queue_items.remove(route_id)
+    async with queue_cond:
+        if route_id in queue_items:
+            queue_items.remove(route_id)
     await broadcast({"type": "route_removed", "route_id": route_id})
+    await broadcast({"type": "queue_updated", "queue": list(queue_items)})
     return {"ok": True}
 
 
@@ -529,12 +526,14 @@ async def enqueue_route(route_id: str):
     route = await routes_store.get_route(route_id)
     if not route:
         raise HTTPException(404, "Route not found")
-    if route_id in queue_items:
-        return {"ok": True, "already_queued": True}
-    await routes_store.update_status(route_id, "pending")
-    queue_items.append(route_id)
-    await search_queue.put(route_id)
+    async with queue_cond:
+        if route_id in queue_items:
+            return {"ok": True, "already_queued": True}
+        await routes_store.update_status(route_id, "pending")
+        queue_items.append(route_id)
+        queue_cond.notify()
     await broadcast({"type": "route_enqueued", "route_id": route_id})
+    await broadcast({"type": "queue_updated", "queue": list(queue_items)})
     return {"ok": True}
 
 
@@ -546,18 +545,21 @@ async def enqueue_all():
     routes = await routes_store.list_routes()
     count = 0
     skipped_completed = 0
-    for r in routes:
-        if r["id"] in queue_items or r["status"] == "searching":
-            continue
-        # Pula rotas ja concluidas (resultado completo)
-        if r["status"] == "completed" and not r.get("is_partial"):
-            skipped_completed += 1
-            continue
-        await routes_store.update_status(r["id"], "pending")
-        queue_items.append(r["id"])
-        await search_queue.put(r["id"])
-        count += 1
+    async with queue_cond:
+        for r in routes:
+            if r["id"] in queue_items or r["status"] == "searching":
+                continue
+            # Pula rotas ja concluidas (resultado completo)
+            if r["status"] == "completed" and not r.get("is_partial"):
+                skipped_completed += 1
+                continue
+            await routes_store.update_status(r["id"], "pending")
+            queue_items.append(r["id"])
+            count += 1
+        if count > 0:
+            queue_cond.notify_all()
     await broadcast({"type": "batch_enqueued", "count": count})
+    await broadcast({"type": "queue_updated", "queue": list(queue_items)})
     return {"ok": True, "enqueued": count, "skipped_completed": skipped_completed}
 
 
@@ -567,16 +569,61 @@ async def enqueue_all_force():
     Use com cuidado: rotas ja conclu\u00eddas perdem seus resultados."""
     routes = await routes_store.list_routes()
     count = 0
-    for r in routes:
-        if r["id"] in queue_items or r["status"] == "searching":
-            continue
-        # Reset limpa is_partial E apaga resultado existente
-        await routes_store.reset_status(r["id"])
-        queue_items.append(r["id"])
-        await search_queue.put(r["id"])
-        count += 1
+    async with queue_cond:
+        for r in routes:
+            if r["id"] in queue_items or r["status"] == "searching":
+                continue
+            # Reset limpa is_partial E apaga resultado existente
+            await routes_store.reset_status(r["id"])
+            queue_items.append(r["id"])
+            count += 1
+        if count > 0:
+            queue_cond.notify_all()
     await broadcast({"type": "batch_enqueued", "count": count, "force": True})
+    await broadcast({"type": "queue_updated", "queue": list(queue_items)})
     return {"ok": True, "enqueued": count}
+
+
+@app.post("/api/routes/{route_id}/move-up")
+async def move_route_up(route_id: str):
+    """Move a rota 1 posicao pra cima na fila."""
+    async with queue_cond:
+        if route_id not in queue_items:
+            raise HTTPException(400, "Rota nao esta na fila")
+        idx = queue_items.index(route_id)
+        if idx == 0:
+            return {"ok": True, "position": 0}  # ja esta no topo
+        queue_items[idx - 1], queue_items[idx] = queue_items[idx], queue_items[idx - 1]
+        new_position = idx - 1
+    await broadcast({"type": "queue_updated", "queue": list(queue_items)})
+    return {"ok": True, "position": new_position}
+
+
+@app.post("/api/routes/{route_id}/move-down")
+async def move_route_down(route_id: str):
+    """Move a rota 1 posicao pra baixo na fila."""
+    async with queue_cond:
+        if route_id not in queue_items:
+            raise HTTPException(400, "Rota nao esta na fila")
+        idx = queue_items.index(route_id)
+        if idx == len(queue_items) - 1:
+            return {"ok": True, "position": idx}  # ja esta no final
+        queue_items[idx], queue_items[idx + 1] = queue_items[idx + 1], queue_items[idx]
+        new_position = idx + 1
+    await broadcast({"type": "queue_updated", "queue": list(queue_items)})
+    return {"ok": True, "position": new_position}
+
+
+@app.post("/api/routes/{route_id}/move-to-top")
+async def move_route_to_top(route_id: str):
+    """Move a rota pro topo da fila (proxima a ser processada)."""
+    async with queue_cond:
+        if route_id not in queue_items:
+            raise HTTPException(400, "Rota nao esta na fila")
+        queue_items.remove(route_id)
+        queue_items.insert(0, route_id)
+    await broadcast({"type": "queue_updated", "queue": list(queue_items)})
+    return {"ok": True, "position": 0}
 
 
 @app.post("/api/routes/{route_id}/retry")
@@ -585,10 +632,12 @@ async def retry_route(route_id: str):
     if not route:
         raise HTTPException(404, "Route not found")
     await routes_store.reset_status(route_id)
-    if route_id not in queue_items:
-        queue_items.append(route_id)
-        await search_queue.put(route_id)
+    async with queue_cond:
+        if route_id not in queue_items:
+            queue_items.append(route_id)
+            queue_cond.notify()
     await broadcast({"type": "route_enqueued", "route_id": route_id})
+    await broadcast({"type": "queue_updated", "queue": list(queue_items)})
     return {"ok": True}
 
 

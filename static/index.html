@@ -635,6 +635,10 @@
                     if (!queueList.includes(msg.route_id)) queueList.push(msg.route_id);
                     renderRoutes();
                     break;
+                case 'queue_updated':
+                    queueList = msg.queue || [];
+                    renderRoutes();
+                    break;
                 case 'batch_enqueued':
                     routes.forEach(r => {
                         if (r.status !== 'searching') r.status = 'pending';
@@ -1084,6 +1088,16 @@
             await fetch(`/api/routes/${id}/enqueue`, { method: 'POST' });
         }
 
+        async function moveRouteUp(id) {
+            await fetch(`/api/routes/${id}/move-up`, { method: 'POST' });
+        }
+        async function moveRouteDown(id) {
+            await fetch(`/api/routes/${id}/move-down`, { method: 'POST' });
+        }
+        async function moveRouteToTop(id) {
+            await fetch(`/api/routes/${id}/move-to-top`, { method: 'POST' });
+        }
+
         async function retryRoute(id) {
             await fetch(`/api/routes/${id}/retry`, { method: 'POST' });
         }
@@ -1181,6 +1195,8 @@
                 const minPriceLabel = r.min_price_k !== null && r.min_price_k !== undefined
                     ? `<span style="color:#34d399;font-weight:600">Menor: ${r.min_price_k}K</span>`
                     : '';
+                // Position in the queue (-1 if not queued)
+                const queuePos = queueList.indexOf(r.id);
                 return `
                 <tr>
                     <td>
@@ -1194,6 +1210,7 @@
                     </td>
                     <td>
                         <span class="status-pill status-${statusKey}">${statusLabel(statusKey)}</span>
+                        ${queuePos >= 0 ? `<div class="route-meta" style="color:#38bdf8;font-weight:600">Fila: ${queuePos + 1}/${queueList.length}</div>` : ''}
                         ${r.last_error ? `<div class="route-meta" style="color:#fca5a5">${escapeHtml(r.last_error)}</div>` : ''}
                     </td>
                     <td>
@@ -1205,9 +1222,14 @@
                     </td>
                     <td>
                         <div style="display:flex;gap:4px;flex-wrap:wrap">
-                            ${statusKey === 'searching' ? '' : `
+                            ${queuePos >= 0 ? `
+                                ${queuePos > 0 ? `<button class="btn btn-ghost btn-sm" title="Priorizar (topo da fila)" onclick="moveRouteToTop('${r.id}')">&#x21C8;</button>` : ''}
+                                ${queuePos > 0 ? `<button class="btn btn-ghost btn-sm" title="Subir" onclick="moveRouteUp('${r.id}')">&#x25B2;</button>` : ''}
+                                ${queuePos < queueList.length - 1 ? `<button class="btn btn-ghost btn-sm" title="Descer" onclick="moveRouteDown('${r.id}')">&#x25BC;</button>` : ''}
+                            ` : ''}
+                            ${statusKey === 'searching' ? '' : (queuePos < 0 ? `
                                 <button class="btn btn-ghost btn-sm" onclick="enqueueRoute('${r.id}')">Buscar</button>
-                            `}
+                            ` : '')}
                             ${statusKey === 'completed' || statusKey === 'error' ? `
                                 <button class="btn btn-ghost btn-sm" onclick="retryRoute('${r.id}')">Refazer</button>
                             ` : ''}
