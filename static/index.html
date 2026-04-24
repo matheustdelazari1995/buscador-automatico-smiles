@@ -1188,7 +1188,25 @@
             const cabinShort = { economy: 'Eco', business: 'Exec', first: '1st' };
             const dirShort = { roundtrip: 'ida+volta', outbound: 'so ida', inbound: 'so volta' };
 
-            tbody.innerHTML = routes.map(r => {
+            // Order: searching first, then queued (in queue order), then the rest
+            // in original (insertion) order. This makes reordering visible.
+            const sortedRoutes = [...routes].sort((a, b) => {
+                const aSearching = a.status === 'searching' ? 1 : 0;
+                const bSearching = b.status === 'searching' ? 1 : 0;
+                if (aSearching !== bSearching) return bSearching - aSearching;
+
+                const aPos = queueList.indexOf(a.id);
+                const bPos = queueList.indexOf(b.id);
+                // Both in queue: order by queue position
+                if (aPos >= 0 && bPos >= 0) return aPos - bPos;
+                // Only a in queue
+                if (aPos >= 0) return -1;
+                if (bPos >= 0) return 1;
+                // Neither in queue: keep original order (stable sort)
+                return 0;
+            });
+
+            tbody.innerHTML = sortedRoutes.map(r => {
                 const progress = progressMap[r.id];
                 const statusKey = r.status || 'pending';
                 const monthsLabel = r.months ? `${r.months.length} meses` : 'ano todo';
