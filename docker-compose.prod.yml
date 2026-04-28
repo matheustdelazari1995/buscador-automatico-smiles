@@ -17,6 +17,18 @@ services:
       - "6080"   # noVNC (interno)
     # Nada exposto direto na internet. Tudo passa pelo nginx.
 
+  assistente:
+    build: ./buscador-assistente
+    container_name: smiles-assistente
+    restart: unless-stopped
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      # Read-only access aos dados raspados pelo scraper principal
+      - ./data:/app/data:ro
+    expose:
+      - "8002"
+
   nginx:
     image: nginx:alpine
     container_name: smiles-nginx
@@ -31,6 +43,7 @@ services:
       - ./certbot/www:/var/www/certbot:ro
     depends_on:
       - app
+      - assistente
 
   certbot:
     image: certbot/certbot

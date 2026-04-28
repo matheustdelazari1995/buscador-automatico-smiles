@@ -315,6 +315,91 @@
         @media (max-width: 768px) {
             .an-toolbar { grid-template-columns: 1fr 1fr; }
         }
+
+        /* ================== CHAT ================== */
+        .chat-wrapper {
+            display: flex; flex-direction: column;
+            height: calc(100vh - 200px); min-height: 500px;
+            background: #1e293b; border: 1px solid #334155;
+            border-radius: 12px; overflow: hidden;
+        }
+        .chat-header {
+            padding: 12px 18px; border-bottom: 1px solid #334155;
+            display: flex; justify-content: space-between; align-items: center;
+            background: #1a2332;
+        }
+        .chat-header h3 { font-size: 14px; color: #cbd5e1; }
+        .chat-header .clear-chat {
+            background: transparent; border: 1px solid #334155;
+            color: #94a3b8; padding: 5px 10px; border-radius: 6px;
+            font-size: 12px; cursor: pointer;
+        }
+        .chat-header .clear-chat:hover { border-color: #ef4444; color: #fca5a5; }
+
+        .chat-messages {
+            flex: 1; overflow-y: auto; padding: 16px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .chat-msg {
+            max-width: 85%; padding: 10px 14px; border-radius: 10px;
+            font-size: 14px; line-height: 1.5; white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .chat-msg.user {
+            align-self: flex-end; background: #1e3a5f; color: #e2e8f0;
+            border: 1px solid #2563eb33;
+        }
+        .chat-msg.assistant {
+            align-self: flex-start; background: #0f172a; color: #cbd5e1;
+            border: 1px solid #334155;
+        }
+        .chat-msg.thinking {
+            color: #64748b; font-style: italic;
+        }
+        .chat-msg b { color: #e2e8f0; font-weight: 600; }
+        .chat-msg em { color: #94a3b8; font-style: italic; }
+        .chat-msg code {
+            background: #1e293b; padding: 1px 5px; border-radius: 3px;
+            font-family: ui-monospace, monospace; font-size: 13px;
+        }
+        .chat-msg ul, .chat-msg ol { margin: 6px 0 6px 22px; }
+        .chat-msg li { margin: 3px 0; }
+
+        .chat-suggestions {
+            padding: 10px 16px; display: flex; gap: 8px; flex-wrap: wrap;
+            border-top: 1px solid #334155;
+        }
+        .chat-chip {
+            background: #0f172a; border: 1px solid #334155; color: #94a3b8;
+            padding: 6px 11px; border-radius: 14px; font-size: 12px;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .chat-chip:hover { border-color: #38bdf8; color: #38bdf8; }
+
+        .chat-input-row {
+            display: flex; gap: 8px; padding: 12px 16px;
+            border-top: 1px solid #334155; background: #1a2332;
+        }
+        .chat-input-row textarea {
+            flex: 1; background: #0f172a; border: 1px solid #334155;
+            border-radius: 8px; padding: 10px 12px; color: #e2e8f0;
+            font-size: 14px; outline: none; resize: none;
+            font-family: inherit; min-height: 40px; max-height: 140px;
+        }
+        .chat-input-row textarea:focus { border-color: #38bdf8; }
+        .chat-input-row button {
+            background: #2563eb; color: white; border: none;
+            border-radius: 8px; padding: 0 22px; font-size: 14px;
+            font-weight: 600; cursor: pointer; min-height: 40px;
+        }
+        .chat-input-row button:disabled { background: #475569; cursor: not-allowed; }
+
+        .chat-banner {
+            padding: 8px 16px; background: #7c2d12;
+            color: #fed7aa; border-bottom: 1px solid #c2410c;
+            font-size: 12px; text-align: center;
+        }
+        .chat-banner.hide { display: none; }
         .result-header {
             display: flex; align-items: center; justify-content: space-between;
             margin-bottom: 12px; gap: 12px; flex-wrap: wrap;
@@ -377,6 +462,9 @@
             </button>
             <button class="tab" onclick="switchTab('analytics')">
                 Analytics
+            </button>
+            <button class="tab" onclick="switchTab('chat')">
+                🤖 Assistente
             </button>
         </div>
 
@@ -572,6 +660,29 @@
                 <div class="empty-state">
                     <div class="icon">...</div>
                     <p>Carregando analytics...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== ABA ASSISTENTE (CHAT) ========== -->
+        <div id="tab-chat" class="tab-content">
+            <div class="chat-wrapper">
+                <div class="chat-header">
+                    <h3>🤖 Assistente Smiles</h3>
+                    <button class="clear-chat" onclick="clearChat()">Limpar conversa</button>
+                </div>
+                <div id="chatBanner" class="chat-banner hide"></div>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-suggestions" id="chatSuggestions">
+                    <span class="chat-chip" onclick="sendChat('Mostra as 5 melhores ofertas que voce tem agora')">5 melhores ofertas</span>
+                    <span class="chat-chip" onclick="sendChat('Saindo de GRU, oportunidades pra Buenos Aires em julho')">GRU → Buenos Aires julho</span>
+                    <span class="chat-chip" onclick="sendChat('Quais voos pra Europa abaixo de 100K milhas em ida+volta?')">Europa &lt; 100K</span>
+                    <span class="chat-chip" onclick="sendChat('O que tem disponivel no Carnaval 2027?')">Carnaval 2027</span>
+                </div>
+                <div class="chat-input-row">
+                    <textarea id="chatInput" placeholder="Pergunta algo... (Shift+Enter pra quebra de linha)"
+                              onkeydown="onChatKey(event)" oninput="autoResize(this)"></textarea>
+                    <button id="chatSendBtn" onclick="sendChat()">Enviar</button>
                 </div>
             </div>
         </div>
@@ -1968,15 +2079,171 @@
             }
         }
 
-        // Hook no switchTab pra carregar analytics quando clicar
+        // ============== CHAT ==============
+        const CHAT_STORAGE_KEY = 'smiles_chat_history_v1';
+        let chatHistory = [];
+        let chatBusy = false;
+
+        function loadChatHistory() {
+            try {
+                const raw = localStorage.getItem(CHAT_STORAGE_KEY);
+                if (raw) chatHistory = JSON.parse(raw);
+            } catch(e) { chatHistory = []; }
+        }
+        function saveChatHistory() {
+            try {
+                // mantem so as ultimas 40 mensagens
+                const trimmed = chatHistory.slice(-40);
+                localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(trimmed));
+            } catch(e) {}
+        }
+
+        function renderChatMarkdown(text) {
+            // Markdown leve: **bold**, *italic*, `code`, listas (- item)
+            let html = text
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            // bold antes de italic pra **xxx** virar bold (nao 2 italic)
+            html = html.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+            html = html.replace(/(?<![\w*])\*([^*\n]+)\*/g, '<em>$1</em>');
+            html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+            // listas: linhas comecando com "- " ou "* "
+            const lines = html.split('\n');
+            let out = []; let inList = false;
+            for (const ln of lines) {
+                const m = ln.match(/^\s*[-*]\s+(.+)$/);
+                if (m) {
+                    if (!inList) { out.push('<ul>'); inList = true; }
+                    out.push('<li>' + m[1] + '</li>');
+                } else {
+                    if (inList) { out.push('</ul>'); inList = false; }
+                    out.push(ln);
+                }
+            }
+            if (inList) out.push('</ul>');
+            return out.join('\n');
+        }
+
+        function renderChatMessages() {
+            const c = document.getElementById('chatMessages');
+            c.innerHTML = chatHistory.map(m => {
+                const cls = m.role === 'user' ? 'user' : 'assistant';
+                const html = m.role === 'assistant'
+                    ? renderChatMarkdown(m.content)
+                    : escapeHtml(m.content);
+                return `<div class="chat-msg ${cls}">${html}</div>`;
+            }).join('');
+            c.scrollTop = c.scrollHeight;
+        }
+
+        function clearChat() {
+            if (!confirm('Limpar conversa? Vai apagar o historico.')) return;
+            chatHistory = [];
+            saveChatHistory();
+            renderChatMessages();
+        }
+
+        function autoResize(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+        }
+
+        function onChatKey(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendChat();
+            }
+        }
+
+        async function sendChat(forcedMessage) {
+            if (chatBusy) return;
+            const input = document.getElementById('chatInput');
+            const message = (forcedMessage || input.value).trim();
+            if (!message) return;
+
+            chatBusy = true;
+            const sendBtn = document.getElementById('chatSendBtn');
+            sendBtn.disabled = true;
+            input.value = '';
+            input.style.height = 'auto';
+
+            chatHistory.push({ role: 'user', content: message });
+            renderChatMessages();
+
+            // bubble "thinking"
+            const c = document.getElementById('chatMessages');
+            const thinkBubble = document.createElement('div');
+            thinkBubble.className = 'chat-msg assistant thinking';
+            thinkBubble.id = '_thinking';
+            thinkBubble.textContent = 'Pensando...';
+            c.appendChild(thinkBubble);
+            c.scrollTop = c.scrollHeight;
+
+            try {
+                const resp = await fetch('/api/assistente/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message,
+                        history: chatHistory.slice(-20, -1),
+                    }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({detail: 'erro desconhecido'}));
+                    throw new Error(err.detail || resp.statusText);
+                }
+                const d = await resp.json();
+                chatHistory.push({ role: 'assistant', content: d.reply });
+                saveChatHistory();
+                document.getElementById('_thinking')?.remove();
+                renderChatMessages();
+            } catch (e) {
+                document.getElementById('_thinking')?.remove();
+                chatHistory.push({
+                    role: 'assistant',
+                    content: `❌ Erro: ${e.message}`,
+                });
+                renderChatMessages();
+            } finally {
+                chatBusy = false;
+                sendBtn.disabled = false;
+                input.focus();
+            }
+        }
+
+        async function checkChatHealth() {
+            try {
+                const resp = await fetch('/api/assistente/health');
+                const d = await resp.json();
+                const banner = document.getElementById('chatBanner');
+                if (!d.key_configured) {
+                    banner.textContent = '⚠️ ANTHROPIC_API_KEY não configurada. Chat indisponível.';
+                    banner.classList.remove('hide');
+                } else {
+                    banner.classList.add('hide');
+                }
+            } catch(e) {
+                const banner = document.getElementById('chatBanner');
+                banner.textContent = '⚠️ Servico do assistente fora do ar.';
+                banner.classList.remove('hide');
+            }
+        }
+
+        // Hook no switchTab pra carregar analytics e chat quando clicar
         const _origSwitchTab = window.switchTab;
         window.switchTab = function(name) {
             _origSwitchTab(name);
             if (name === 'analytics') {
                 initAnalyticsFilters().then(() => renderAnalytics());
             }
+            if (name === 'chat') {
+                loadChatHistory();
+                renderChatMessages();
+                checkChatHealth();
+                setTimeout(() => document.getElementById('chatInput')?.focus(), 100);
+            }
         };
 
+        loadChatHistory();
         connectWS();
     </script>
 </body>

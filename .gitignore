@@ -16,3 +16,4 @@ data/
 *.db-wal
 *.db-shm
 prices.db*
+.env
