@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Buscador Automatico Smiles</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -228,6 +229,92 @@
         @media (max-width: 768px) {
             .results-toolbar { grid-template-columns: 1fr 1fr; }
         }
+
+        /* ================== ANALYTICS ================== */
+        .an-toolbar {
+            background: #1e293b; border-radius: 10px; padding: 12px 16px;
+            margin-bottom: 14px; border: 1px solid #334155;
+            display: grid; grid-template-columns: repeat(4, 1fr) auto auto;
+            gap: 10px; align-items: end;
+        }
+        .an-toolbar select, .an-toolbar input {
+            background: #0f172a; border: 1px solid #334155; border-radius: 6px;
+            padding: 7px 10px; color: #e2e8f0; font-size: 13px; outline: none;
+        }
+        .an-toolbar label {
+            font-size: 11px; color: #64748b; text-transform: uppercase;
+            letter-spacing: 0.5px; display: block; margin-bottom: 3px;
+        }
+
+        .an-subtabs {
+            display: flex; gap: 0; margin-bottom: 14px;
+            border-bottom: 1px solid #334155;
+        }
+        .an-subtab {
+            background: transparent; border: none; color: #94a3b8;
+            padding: 9px 18px; font-size: 13px; cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        .an-subtab:hover { color: #e2e8f0; }
+        .an-subtab.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+
+        .an-table {
+            width: 100%; background: #1e293b; border-radius: 10px;
+            border: 1px solid #334155; border-collapse: collapse; overflow: hidden;
+        }
+        .an-table th {
+            text-align: left; font-size: 11px; text-transform: uppercase;
+            color: #64748b; letter-spacing: 0.5px; padding: 10px 12px;
+            border-bottom: 1px solid #334155; background: #1a2332;
+        }
+        .an-table td {
+            padding: 10px 12px; font-size: 13px;
+            border-bottom: 1px solid #1f2937; vertical-align: middle;
+        }
+        .an-table tbody tr:hover td { background: #0f172a; }
+        .an-table tbody tr:last-child td { border-bottom: none; }
+        .an-route-cell { font-weight: 600; color: #e2e8f0; }
+        .an-meta { font-size: 11px; color: #64748b; }
+        .an-miles {
+            font-family: ui-monospace, monospace; font-weight: 600;
+            color: #cbd5e1; white-space: nowrap;
+        }
+        .an-delta-down { color: #34d399; font-weight: 600; }
+        .an-delta-up { color: #f87171; font-weight: 600; }
+        .an-delta-zero { color: #94a3b8; }
+        .an-actions {
+            display: flex; gap: 4px;
+        }
+        .an-actions button {
+            background: transparent; border: 1px solid #334155;
+            color: #94a3b8; border-radius: 6px; padding: 4px 9px;
+            font-size: 12px; cursor: pointer; transition: all 0.15s;
+        }
+        .an-actions button:hover {
+            border-color: #38bdf8; color: #38bdf8;
+        }
+
+        .an-detail-row td {
+            background: #0f172a !important;
+            padding: 16px 20px;
+        }
+        .an-pills {
+            display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+        }
+        .an-pill {
+            background: #1e293b; border: 1px solid #334155;
+            padding: 5px 12px; border-radius: 12px; font-size: 12px;
+            color: #94a3b8;
+        }
+        .an-pill b { color: #e2e8f0; font-weight: 600; }
+        .an-chart-container {
+            background: #1e293b; border-radius: 8px; padding: 12px;
+            border: 1px solid #334155; height: 240px;
+        }
+
+        @media (max-width: 768px) {
+            .an-toolbar { grid-template-columns: 1fr 1fr; }
+        }
         .result-header {
             display: flex; align-items: center; justify-content: space-between;
             margin-bottom: 12px; gap: 12px; flex-wrap: wrap;
@@ -287,6 +374,9 @@
             </button>
             <button class="tab" onclick="switchTab('accounts')">
                 Contas <span class="count" id="accountsCount">0</span>
+            </button>
+            <button class="tab" onclick="switchTab('analytics')">
+                Analytics
             </button>
         </div>
 
@@ -435,6 +525,53 @@
                 <div class="empty-state">
                     <div class="icon">...</div>
                     <p>Nenhum resultado ainda.<br>Cadastre rotas e inicie a busca.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== ABA ANALYTICS ========== -->
+        <div id="tab-analytics" class="tab-content">
+            <div class="an-toolbar">
+                <div>
+                    <label>Programa</label>
+                    <select id="anProgram" onchange="onAnFiltersChange()">
+                        <option value="all">Todos</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Classe</label>
+                    <select id="anCabin" onchange="onAnFiltersChange()">
+                        <option value="all">Todas</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Origem</label>
+                    <select id="anOrigin" onchange="onAnFiltersChange()">
+                        <option value="">Todas</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Limit</label>
+                    <select id="anLimit" onchange="onAnFiltersChange()">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                <button class="clear-btn" onclick="refreshAnalytics()" title="Atualizar dados">Atualizar</button>
+            </div>
+
+            <div class="an-subtabs">
+                <button class="an-subtab active" onclick="switchAnSubtab('drops')">Maiores quedas</button>
+                <button class="an-subtab" onclick="switchAnSubtab('below')">Abaixo da média</button>
+                <button class="an-subtab" onclick="switchAnSubtab('cheapest')">Mais baratas agora</button>
+            </div>
+
+            <div id="anContent">
+                <div class="empty-state">
+                    <div class="icon">...</div>
+                    <p>Carregando analytics...</p>
                 </div>
             </div>
         </div>
@@ -1528,6 +1665,318 @@
         });
 
         initMonthFilterDropdown();
+
+        // ============== ANALYTICS ==============
+        let anCurrentSubtab = 'drops';
+        let anExpandedRoute = null;
+        let anChartInstance = null;
+        let anFiltersInited = false;
+
+        async function initAnalyticsFilters() {
+            if (anFiltersInited) return;
+            anFiltersInited = true;
+            try {
+                const [origins, programs, cabins] = await Promise.all([
+                    fetch('/api/analytics/origins').then(r => r.json()),
+                    fetch('/api/analytics/programs').then(r => r.json()),
+                    fetch('/api/analytics/cabins').then(r => r.json()),
+                ]);
+                const programLabels = {G3: 'Smiles GOL', TP: 'TAP Miles&Go'};
+                const cabinLabels = {economy: 'Econômica', business: 'Executiva', first: 'Primeira'};
+                const pSel = document.getElementById('anProgram');
+                (programs.items || []).forEach(p => {
+                    const o = document.createElement('option');
+                    o.value = p; o.textContent = programLabels[p] || p;
+                    pSel.appendChild(o);
+                });
+                const cSel = document.getElementById('anCabin');
+                (cabins.items || []).forEach(c => {
+                    const o = document.createElement('option');
+                    o.value = c; o.textContent = cabinLabels[c] || c;
+                    cSel.appendChild(o);
+                });
+                const oSel = document.getElementById('anOrigin');
+                (origins.items || []).forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o; opt.textContent = o;
+                    oSel.appendChild(opt);
+                });
+            } catch (e) {
+                console.error('Erro ao carregar filtros analytics:', e);
+            }
+        }
+
+        function getAnFilters() {
+            return {
+                program: document.getElementById('anProgram').value,
+                cabin: document.getElementById('anCabin').value,
+                origin: document.getElementById('anOrigin').value,
+                limit: parseInt(document.getElementById('anLimit').value) || 10,
+            };
+        }
+
+        function buildAnQuery(extra = {}) {
+            const f = { ...getAnFilters(), ...extra };
+            const params = new URLSearchParams();
+            if (f.program && f.program !== 'all') params.set('program', f.program);
+            if (f.cabin && f.cabin !== 'all') params.set('cabin', f.cabin);
+            if (f.origin) params.set('origin', f.origin);
+            if (f.limit) params.set('limit', f.limit);
+            if (extra.days) params.set('days', extra.days);
+            if (extra.min_drop_pct != null) params.set('min_drop_pct', extra.min_drop_pct);
+            if (extra.min_pct_below != null) params.set('min_pct_below', extra.min_pct_below);
+            return params.toString();
+        }
+
+        function switchAnSubtab(name) {
+            anCurrentSubtab = name;
+            anExpandedRoute = null;
+            document.querySelectorAll('.an-subtab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            renderAnalytics();
+        }
+
+        function onAnFiltersChange() {
+            anExpandedRoute = null;
+            renderAnalytics();
+        }
+
+        async function refreshAnalytics() {
+            try {
+                await fetch('/api/analytics/cache/invalidate', { method: 'POST' });
+            } catch(e) {}
+            anExpandedRoute = null;
+            await renderAnalytics();
+        }
+
+        async function renderAnalytics() {
+            const content = document.getElementById('anContent');
+            content.innerHTML = '<div class="empty-state"><p>Carregando...</p></div>';
+            const qs = buildAnQuery();
+            let url = '';
+            if (anCurrentSubtab === 'drops') url = `/api/analytics/top-drops?${qs}`;
+            else if (anCurrentSubtab === 'below') url = `/api/analytics/below-average?${qs}&days=30`;
+            else url = `/api/analytics/cheapest?${qs}`;
+
+            try {
+                const r = await fetch(url);
+                const d = await r.json();
+                renderAnTable(d.items || []);
+            } catch (e) {
+                content.innerHTML = `<div class="empty-state"><p style="color:#fca5a5">Erro ao carregar: ${e}</p></div>`;
+            }
+        }
+
+        function fmtMiles(n) {
+            if (n == null) return '-';
+            return `${n}K`;
+        }
+        function fmtPct(n) {
+            if (n == null) return '-';
+            const sign = n > 0 ? '+' : '';
+            return `${sign}${n.toFixed(1)}%`;
+        }
+        function fmtDateBR(iso) {
+            if (!iso) return '-';
+            try {
+                const d = new Date(iso);
+                return d.toLocaleString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: '2-digit',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            } catch { return iso; }
+        }
+        function escapeHtmlAn(s) {
+            return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        function renderAnTable(items) {
+            const content = document.getElementById('anContent');
+            if (!items.length) {
+                let msg = 'Nenhum resultado.';
+                if (anCurrentSubtab === 'drops' || anCurrentSubtab === 'below') {
+                    msg += ' Cada rota precisa de pelo menos 2 buscas para análise comparativa.';
+                }
+                content.innerHTML = `<div class="empty-state"><p>${msg}</p></div>`;
+                return;
+            }
+
+            const cabinShort = {economy: 'Eco', business: 'Exec', first: '1st'};
+            const programShort = {G3: 'Smiles', TP: 'TAP'};
+
+            let cols = '';
+            let rowsHtml = '';
+            if (anCurrentSubtab === 'drops') {
+                cols = `<tr><th>Rota</th><th>Atual</th><th>Anterior</th><th>Δ</th><th>Buscado em</th><th>Ações</th></tr>`;
+                rowsHtml = items.map(it => {
+                    const dpct = it.delta_pct;
+                    const dcls = dpct < 0 ? 'an-delta-down' : (dpct > 0 ? 'an-delta-up' : 'an-delta-zero');
+                    return `<tr data-route="${it.route_id}">
+                        <td>
+                          <div class="an-route-cell">${it.origin} → ${it.dest}</div>
+                          <div class="an-meta">${programShort[it.program] || it.program} | ${cabinShort[it.cabin] || it.cabin}</div>
+                        </td>
+                        <td class="an-miles">${fmtMiles(it.current_miles)}</td>
+                        <td class="an-miles">${fmtMiles(it.previous_miles)}</td>
+                        <td class="${dcls}">${fmtPct(dpct)}</td>
+                        <td class="an-meta">${fmtDateBR(it.current_searched_at)}</td>
+                        <td><div class="an-actions">
+                          <button onclick="toggleAnHistory('${it.route_id}')" title="Histórico">📊 Histórico</button>
+                          <button onclick="copyAnRoute('${it.route_id}', ${it.current_miles})" title="Copiar texto">📋 Copiar</button>
+                        </div></td>
+                    </tr>`;
+                }).join('');
+            } else if (anCurrentSubtab === 'below') {
+                cols = `<tr><th>Rota</th><th>Atual</th><th>Média 30d</th><th>vs média</th><th>Min/Max</th><th>Ações</th></tr>`;
+                rowsHtml = items.map(it => {
+                    const pct = it.pct_vs_avg;
+                    const cls = pct < 0 ? 'an-delta-down' : (pct > 0 ? 'an-delta-up' : 'an-delta-zero');
+                    return `<tr data-route="${it.route_id}">
+                        <td>
+                          <div class="an-route-cell">${it.origin} → ${it.dest}</div>
+                          <div class="an-meta">${programShort[it.program] || it.program} | ${cabinShort[it.cabin] || it.cabin} | ${it.count_snapshots} snap</div>
+                        </td>
+                        <td class="an-miles">${fmtMiles(it.current_miles)}</td>
+                        <td class="an-miles">${fmtMiles(Math.round(it.avg_miles))}</td>
+                        <td class="${cls}">${fmtPct(pct)}</td>
+                        <td class="an-meta">${fmtMiles(it.min_miles_window)} / ${fmtMiles(it.max_miles_window)}</td>
+                        <td><div class="an-actions">
+                          <button onclick="toggleAnHistory('${it.route_id}')">📊 Histórico</button>
+                          <button onclick="copyAnRoute('${it.route_id}', ${it.current_miles})">📋 Copiar</button>
+                        </div></td>
+                    </tr>`;
+                }).join('');
+            } else {
+                cols = `<tr><th>Rota</th><th>Milhas</th><th>Buscado em</th><th>Conta</th><th>Ações</th></tr>`;
+                rowsHtml = items.map(it => `<tr data-route="${it.route_id}">
+                    <td>
+                      <div class="an-route-cell">${it.origin} → ${it.dest}</div>
+                      <div class="an-meta">${programShort[it.program] || it.program} | ${cabinShort[it.cabin] || it.cabin}</div>
+                    </td>
+                    <td class="an-miles">${fmtMiles(it.current_miles)}</td>
+                    <td class="an-meta">${fmtDateBR(it.current_searched_at)}</td>
+                    <td class="an-meta">${escapeHtmlAn(it.account_id || '-')}</td>
+                    <td><div class="an-actions">
+                      <button onclick="toggleAnHistory('${it.route_id}')">📊 Histórico</button>
+                      <button onclick="copyAnRoute('${it.route_id}', ${it.current_miles})">📋 Copiar</button>
+                    </div></td>
+                </tr>`).join('');
+            }
+
+            content.innerHTML = `<table class="an-table"><thead>${cols}</thead><tbody>${rowsHtml}</tbody></table>`;
+        }
+
+        async function toggleAnHistory(routeId) {
+            // Se já está expandida, fecha
+            const existing = document.querySelector(`tr.an-detail-row[data-detail="${routeId}"]`);
+            if (existing) {
+                existing.remove();
+                if (anChartInstance) { anChartInstance.destroy(); anChartInstance = null; }
+                anExpandedRoute = null;
+                return;
+            }
+            // Fecha qualquer outro expandido
+            document.querySelectorAll('tr.an-detail-row').forEach(t => t.remove());
+            if (anChartInstance) { anChartInstance.destroy(); anChartInstance = null; }
+
+            // Busca histórico
+            let hist;
+            try {
+                const resp = await fetch(`/api/analytics/route/${routeId}/history?days=30`);
+                hist = await resp.json();
+            } catch (e) {
+                alert('Erro ao buscar histórico: ' + e);
+                return;
+            }
+            anExpandedRoute = routeId;
+
+            // Insere linha de detalhe
+            const tr = document.querySelector(`tr[data-route="${routeId}"]`);
+            if (!tr) return;
+            const colspan = tr.children.length;
+            const detail = document.createElement('tr');
+            detail.className = 'an-detail-row';
+            detail.dataset.detail = routeId;
+
+            const stats = hist.stats || {};
+            const meta = hist.meta || {};
+            const points = hist.points || [];
+            const pillsHtml = `
+                <div class="an-pills">
+                    <span class="an-pill">${meta.origin || '?'} → ${meta.dest || '?'}</span>
+                    <span class="an-pill">Atual: <b>${fmtMiles(stats.current)}</b></span>
+                    <span class="an-pill">Média: <b>${stats.avg != null ? Math.round(stats.avg) + 'K' : '-'}</b></span>
+                    <span class="an-pill">Min: <b>${fmtMiles(stats.min)}</b></span>
+                    <span class="an-pill">Max: <b>${fmtMiles(stats.max)}</b></span>
+                    <span class="an-pill">Snapshots: <b>${stats.count || 0}</b></span>
+                    <span class="an-pill">vs média: <b class="${stats.pct_vs_avg < 0 ? 'an-delta-down' : 'an-delta-up'}">${fmtPct(stats.pct_vs_avg)}</b></span>
+                </div>
+                <div class="an-chart-container">
+                    <canvas id="anChart-${routeId}"></canvas>
+                </div>
+            `;
+            detail.innerHTML = `<td colspan="${colspan}">${pillsHtml}</td>`;
+            tr.parentNode.insertBefore(detail, tr.nextSibling);
+
+            // Renderiza chart
+            if (points.length) {
+                const ctx = document.getElementById(`anChart-${routeId}`);
+                anChartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: points.map(p => fmtDateBR(p.searched_at)),
+                        datasets: [{
+                            label: 'Min Milhas (K)',
+                            data: points.map(p => p.min_miles),
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.15)',
+                            tension: 0.3,
+                            fill: true,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: '#cbd5e1' } } },
+                        scales: {
+                            x: { ticks: { color: '#94a3b8' }, grid: { color: '#1f2937' } },
+                            y: { ticks: { color: '#94a3b8' }, grid: { color: '#1f2937' } },
+                        }
+                    }
+                });
+            }
+        }
+
+        async function copyAnRoute(routeId, currentMiles) {
+            try {
+                const resp = await fetch(`/api/routes/${routeId}/whatsapp-text`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ max_price_k: currentMiles || null }),
+                });
+                if (!resp.ok) {
+                    const e = await resp.json();
+                    alert('Erro: ' + (e.detail || 'falha'));
+                    return;
+                }
+                const d = await resp.json();
+                await navigator.clipboard.writeText(d.text);
+                alert('Texto copiado pra área de transferência!');
+            } catch (e) {
+                alert('Erro ao copiar: ' + e);
+            }
+        }
+
+        // Hook no switchTab pra carregar analytics quando clicar
+        const _origSwitchTab = window.switchTab;
+        window.switchTab = function(name) {
+            _origSwitchTab(name);
+            if (name === 'analytics') {
+                initAnalyticsFilters().then(() => renderAnalytics());
+            }
+        };
+
         connectWS();
     </script>
 </body>

@@ -29,6 +29,7 @@ from routes_store import RoutesStore
 from accounts_store import AccountsStore
 from system_state import SystemState
 from database import PriceDatabase
+import analytics
 
 
 app = FastAPI(title="Buscador Automatico Smiles")
@@ -297,6 +298,8 @@ async def account_worker(account_id: str):
                 try:
                     if price_db is not None:
                         await price_db.save_snapshot(route_id, result)
+                        # Invalida cache de analytics pra refletir o novo snapshot
+                        analytics.invalidate_cache()
                 except Exception as e:
                     print(f"[price_db] save_snapshot falhou para {route_id}: {e}")
                 await broadcast({
@@ -736,6 +739,70 @@ async def get_route_snapshots(route_id: str, days: Optional[int] = None):
     if not await routes_store.get_route(route_id):
         raise HTTPException(404, "Route not found")
     return await price_db.get_snapshots(route_id, days=days)
+
+
+# ===== Endpoints: Analytics =====
+# Lê do prices.db read-only via analytics.py (cache em memoria com TTL)
+@app.get("/api/analytics/origins")
+async def analytics_origins():
+    return {"items": analytics.list_origins()}
+
+
+@app.get("/api/analytics/programs")
+async def analytics_programs():
+    return {"items": analytics.list_programs()}
+
+
+@app.get("/api/analytics/cabins")
+async def analytics_cabins():
+    return {"items": analytics.list_cabins()}
+
+
+@app.get("/api/analytics/top-drops")
+async def analytics_top_drops(
+    program: str = "all", cabin: str = "all",
+    limit: int = 10, min_drop_pct: float = 0.0,
+    origin: Optional[str] = None,
+):
+    return {"items": analytics.top_drops(
+        program=program, cabin=cabin, limit=limit,
+        min_drop_pct=min_drop_pct, origin=origin,
+    )}
+
+
+@app.get("/api/analytics/below-average")
+async def analytics_below_average(
+    program: str = "all", cabin: str = "all",
+    limit: int = 10, days: int = 30,
+    min_pct_below: float = 0.0,
+    origin: Optional[str] = None,
+):
+    return {"items": analytics.most_below_average(
+        program=program, cabin=cabin, limit=limit,
+        days=days, min_pct_below=min_pct_below, origin=origin,
+    )}
+
+
+@app.get("/api/analytics/cheapest")
+async def analytics_cheapest(
+    program: str = "all", cabin: str = "all",
+    limit: int = 10,
+    origin: Optional[str] = None,
+):
+    return {"items": analytics.cheapest_now(
+        program=program, cabin=cabin, limit=limit, origin=origin,
+    )}
+
+
+@app.get("/api/analytics/route/{route_id}/history")
+async def analytics_route_history(route_id: str, days: int = 30):
+    return analytics.route_history(route_id, days=days)
+
+
+@app.post("/api/analytics/cache/invalidate")
+async def analytics_invalidate_cache():
+    analytics.invalidate_cache()
+    return {"ok": True}
 
 
 @app.post("/api/routes/{route_id}/whatsapp-text")
