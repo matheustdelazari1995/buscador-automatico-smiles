@@ -36,6 +36,8 @@ app = FastAPI(title="Buscador Automatico Smiles")
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 BLOCK_PAUSE_SECONDS = 10 * 60  # 10 minutes when an account is blocked
 DELAY_BETWEEN_ROUTES = 10 * 60  # 10 minutes between routes on same account
+EMPTY_RESULT_RETRY_DELAY = 30 * 60  # 30 min before retrying a route that returned 0 days
+MAX_EMPTY_RETRIES = 2  # max times to auto-retry an empty result
 
 
 def load_config():
@@ -208,6 +210,17 @@ async def account_worker(account_id: str):
         if route.get("status") == "searching":
             continue
 
+        # Skip if retry_not_before is in the future (auto-retry scheduled).
+        # Recoloca no final da fila e dorme um pouco antes de tentar a proxima.
+        if route.get("retry_not_before"):
+            now_ts = datetime.now().timestamp()
+            if now_ts < route["retry_not_before"]:
+                async with queue_cond:
+                    queue_items.append(route_id)
+                    queue_cond.notify()
+                await asyncio.sleep(5)
+                continue
+
         # Claim the route
         await routes_store.update_status(route_id, "searching")
         await accounts_store.set_status(account_id, "searching", current_route_id=route_id)
@@ -248,13 +261,42 @@ async def account_worker(account_id: str):
             )
             result["route_id"] = route_id
             result["account_id"] = account_id
-            await routes_store.save_result(route_id, result)
-            await broadcast({
-                "type": "route_completed",
-                "route_id": route_id,
-                "account_id": account_id,
-                "result": result,
-            })
+
+            # Check if result is completely empty (0 days in outbound + inbound).
+            # Pode ser glitch do AwardTool. Re-enfileira pra tentar de novo em 30min.
+            total_days = sum(
+                len(d) for d in (result.get("outbound") or {}).values()
+            ) + sum(
+                len(d) for d in (result.get("inbound") or {}).values()
+            )
+            current_retries = route.get("empty_retry_count", 0) or 0
+
+            if total_days == 0 and current_retries < MAX_EMPTY_RETRIES:
+                # Resultado vazio - agenda retry em 30min (sem salvar como completed)
+                await routes_store.mark_for_empty_retry(
+                    route_id, retry_delay_seconds=EMPTY_RESULT_RETRY_DELAY
+                )
+                async with queue_cond:
+                    if route_id not in queue_items:
+                        queue_items.append(route_id)
+                    queue_cond.notify()
+                await broadcast({
+                    "type": "route_empty_retry",
+                    "route_id": route_id,
+                    "account_id": account_id,
+                    "retry_count": current_retries + 1,
+                    "retry_in_seconds": EMPTY_RESULT_RETRY_DELAY,
+                })
+            else:
+                # Resultado normal (com dados) ou esgotou retries - salva como completed
+                await routes_store.save_result(route_id, result)
+                await routes_store.clear_retry_state(route_id)
+                await broadcast({
+                    "type": "route_completed",
+                    "route_id": route_id,
+                    "account_id": account_id,
+                    "result": result,
+                })
 
             # Delay between routes (on same account) to avoid bot detection.
             # Interruptible: if user clicks "Pular cooldown", the event is set

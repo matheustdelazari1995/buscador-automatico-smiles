@@ -53,13 +53,14 @@ class AwardToolBlocked(Exception):
 
 
 def get_months_to_search():
-    """Returns list of (year, month, name, start_ts, end_ts) for next 12 months."""
+    """Returns list of (year, month, name, start_ts, end_ts) for next 12 months,
+    starting from the CURRENT month (mes atual + 11 meses a frente).
+    For the current month, range_start is the search day (not day 1) - avoids
+    asking the site for dates already in the past.
+    """
     today = datetime.now()
-    start_month = today.month + (1 if today.day > 15 else 0)
+    start_month = today.month
     start_year = today.year
-    if start_month > 12:
-        start_month -= 12
-        start_year += 1
 
     months = []
     for i in range(12):
@@ -68,7 +69,11 @@ def get_months_to_search():
         while m > 12:
             m -= 12
             y += 1
-        start_ts = int(datetime(y, m, 1).timestamp())
+        if i == 0:
+            # Mes atual: comeca de hoje, nao do dia 1 (evita datas ja passadas)
+            start_ts = int(datetime(y, m, today.day).timestamp())
+        else:
+            start_ts = int(datetime(y, m, 1).timestamp())
         _, last_day = monthrange(y, m)
         end_ts = int(datetime(y, m, last_day, 23, 59, 59).timestamp())
         name = f"{MONTH_NAMES_PT[m]} {y}"
@@ -131,9 +136,16 @@ class AwardToolSearchEngine:
     async def start(self):
         if self._started:
             return
-        # Allow absolute or relative path; relative = next to this file
+        # Resolve profile path. Order:
+        # 1. Absolute path: use as-is
+        # 2. /app/profiles exists (Docker volume): use /app/profiles/<sanitized_dir>
+        # 3. else: next to this file (dev local)
         if os.path.isabs(self.profile_dir):
             browser_profile = self.profile_dir
+        elif os.path.isdir("/app/profiles"):
+            # In Docker: profile name = profile_dir without leading dot/dashes
+            safe_name = self.profile_dir.lstrip(".")
+            browser_profile = os.path.join("/app/profiles", safe_name)
         else:
             browser_profile = os.path.join(os.path.dirname(__file__), self.profile_dir)
         os.makedirs(browser_profile, exist_ok=True)
@@ -212,9 +224,20 @@ class AwardToolSearchEngine:
         for i, month in enumerate(months):
             url = build_url(origin, dest, program, month["start"], month["end"])
             try:
-                # Timeout de 45s: se a pagina nao carregar em 45s, desiste desse mes
+                # Timeout de 90s: VPS em outro continente pode ter mais latencia
+                # que rodar local, e a primeira carga do AwardTool eh pesada (JS/CSS).
+                # Se a pagina nao carregar em 90s, desiste desse mes.
                 # (evita que o Chrome trave indefinidamente aguardando carregamento)
-                await self.page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                try:
+                    await self.page.goto(url, wait_until="domcontentloaded", timeout=90000)
+                except Exception as e:
+                    # Se domcontentloaded falhar, tenta de novo com 'commit' (so espera
+                    # comecar a navegacao) e da mais tempo pro JS rodar via sleep maior.
+                    if "Timeout" in str(e) or "timeout" in str(e):
+                        await self.page.goto(url, wait_until="commit", timeout=30000)
+                        await asyncio.sleep(15)  # tempo extra pro JS terminar de carregar
+                    else:
+                        raise
                 await asyncio.sleep(DELAY_BETWEEN_SEARCHES)
 
                 # Check for explicit block keywords

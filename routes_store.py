@@ -10,8 +10,11 @@ import uuid
 from datetime import datetime
 
 
-ROUTES_FILE = os.path.join(os.path.dirname(__file__), "routes.json")
-RESULTS_FILE = os.path.join(os.path.dirname(__file__), "results.json")
+# Use /app/data if it exists (Docker volume), else local dir (dev local).
+# Allows JSON state to survive Docker container rebuilds.
+_DATA_DIR = "/app/data" if os.path.isdir("/app/data") else os.path.dirname(__file__)
+ROUTES_FILE = os.path.join(_DATA_DIR, "routes.json")
+RESULTS_FILE = os.path.join(_DATA_DIR, "results.json")
 
 
 class RoutesStore:
@@ -34,6 +37,10 @@ class RoutesStore:
                     self.results = json.load(f)
             except Exception:
                 self.results = {}
+        # Garante campos de retry em rotas antigas
+        for r in self.routes:
+            r.setdefault("empty_retry_count", 0)
+            r.setdefault("retry_not_before", None)
 
     async def _save(self):
         with open(ROUTES_FILE, "w") as f:
@@ -75,10 +82,38 @@ class RoutesStore:
                 "last_searched_at": None,
                 "last_error": None,
                 "whatsapp_sent_at": None,
+                # Auto-retry: quando resultado vem vazio
+                "empty_retry_count": 0,
+                "retry_not_before": None,  # epoch timestamp ou None
             }
             self.routes.append(route)
             await self._save()
             return route
+
+    async def mark_for_empty_retry(self, route_id, retry_delay_seconds=1800):
+        """Marca uma rota pra re-tentar depois de X segundos (default 30min).
+        Incrementa empty_retry_count e seta retry_not_before."""
+        async with self._lock:
+            for r in self.routes:
+                if r["id"] == route_id:
+                    r["empty_retry_count"] = (r.get("empty_retry_count") or 0) + 1
+                    r["retry_not_before"] = datetime.now().timestamp() + retry_delay_seconds
+                    r["status"] = "pending"
+                    r["is_partial"] = False
+                    await self._save()
+                    return dict(r)
+            return None
+
+    async def clear_retry_state(self, route_id):
+        """Limpa estado de retry (quando resultado bem-sucedido salvo)."""
+        async with self._lock:
+            for r in self.routes:
+                if r["id"] == route_id:
+                    r["empty_retry_count"] = 0
+                    r["retry_not_before"] = None
+                    await self._save()
+                    return
+            return
 
     async def remove_route(self, route_id):
         async with self._lock:
@@ -99,6 +134,10 @@ class RoutesStore:
                         r["last_error"] = None
                     elif status == "error":
                         r["last_error"] = error
+                    elif status in ("pending", "searching"):
+                        # Quando re-enfileira ou comeca a buscar, limpa erro antigo
+                        # pra nao confundir o usuario com mensagens obsoletas
+                        r["last_error"] = None
                     await self._save()
                     return dict(r)
             return None
