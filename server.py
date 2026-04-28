@@ -28,6 +28,7 @@ from search_engine import (
 from routes_store import RoutesStore
 from accounts_store import AccountsStore
 from system_state import SystemState
+from database import PriceDatabase
 
 
 app = FastAPI(title="Buscador Automatico Smiles")
@@ -62,6 +63,7 @@ queue_cond = None    # asyncio.Condition (lock + wait/notify)
 
 system_state: Optional[SystemState] = None
 cooldown_skip_events = {}  # account_id -> asyncio.Event (set to skip cooldown)
+price_db: Optional[PriceDatabase] = None
 
 
 # ===== Models =====
@@ -291,6 +293,12 @@ async def account_worker(account_id: str):
                 # Resultado normal (com dados) ou esgotou retries - salva como completed
                 await routes_store.save_result(route_id, result)
                 await routes_store.clear_retry_state(route_id)
+                # Histórico em SQLite (não-fatal: falha aqui não afeta o resto)
+                try:
+                    if price_db is not None:
+                        await price_db.save_snapshot(route_id, result)
+                except Exception as e:
+                    print(f"[price_db] save_snapshot falhou para {route_id}: {e}")
                 await broadcast({
                     "type": "route_completed",
                     "route_id": route_id,
@@ -399,11 +407,12 @@ async def stop_worker_for_account(account_id: str):
 # ===== Startup =====
 @app.on_event("startup")
 async def startup():
-    global queue_cond, routes_store, accounts_store, system_state
+    global queue_cond, routes_store, accounts_store, system_state, price_db
     queue_cond = asyncio.Condition()
     routes_store = RoutesStore()
     accounts_store = AccountsStore()
     system_state = SystemState()
+    price_db = PriceDatabase()
 
     # CRASH RECOVERY: reset any accounts stuck in 'searching' to 'idle'
     # and any routes stuck in 'searching' back to 'pending' (they'll need re-queue)
@@ -417,6 +426,20 @@ async def startup():
     for r in all_routes:
         if r.get("status") == "searching":
             await routes_store.update_status(r["id"], "pending")
+
+    # ONE-SHOT MIGRATION: pra cada result em results.json que ainda nao tem
+    # snapshot no DB, cria um. Garante que historico comeca com o estado atual.
+    try:
+        all_results = await routes_store.list_results()
+        migrated = 0
+        for route_id, result in all_results.items():
+            if not await price_db.has_any_snapshot(route_id):
+                await price_db.save_snapshot(route_id, result)
+                migrated += 1
+        if migrated > 0:
+            print(f"[price_db] Migracao inicial: {migrated} snapshots criados a partir de results.json")
+    except Exception as e:
+        print(f"[price_db] Migracao inicial falhou: {e}")
 
     # Start one worker per enabled account
     enabled = await accounts_store.enabled_accounts()
@@ -690,6 +713,29 @@ async def get_result(route_id: str):
     if not result:
         raise HTTPException(404, "Result not found")
     return result
+
+
+@app.get("/api/routes/{route_id}/trend")
+async def get_route_trend(route_id: str, days: int = 30):
+    """Estatisticas dos ultimos N dias da rota.
+    Inclui min_miles atual, anterior, media, min, max, count, deltas."""
+    if price_db is None:
+        raise HTTPException(503, "Price DB not initialized")
+    if days < 1 or days > 3650:
+        raise HTTPException(400, "days must be between 1 and 3650")
+    if not await routes_store.get_route(route_id):
+        raise HTTPException(404, "Route not found")
+    return await price_db.get_trend(route_id, days=days)
+
+
+@app.get("/api/routes/{route_id}/snapshots")
+async def get_route_snapshots(route_id: str, days: Optional[int] = None):
+    """Lista snapshots historicos da rota."""
+    if price_db is None:
+        raise HTTPException(503, "Price DB not initialized")
+    if not await routes_store.get_route(route_id):
+        raise HTTPException(404, "Route not found")
+    return await price_db.get_snapshots(route_id, days=days)
 
 
 @app.post("/api/routes/{route_id}/whatsapp-text")

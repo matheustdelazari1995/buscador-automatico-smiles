@@ -13,3 +13,6 @@ system_state.json
 resultados/
 data/
 *.db
+*.db-wal
+*.db-shm
+prices.db*
